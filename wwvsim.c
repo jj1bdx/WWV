@@ -205,7 +205,6 @@ int main(int argc,char *argv[]){
   day = tm->tm_mday;
   month = tm->tm_mon + 1;
   year = tm->tm_year + 1900;
-  doy = tm->tm_yday + 1;
   setlocale(LC_ALL,getenv("LANG"));
 
   // Read and process command line arguments
@@ -267,6 +266,17 @@ int main(int argc,char *argv[]){
 	      
     }	
   }
+  // Compute day of year
+  // don't use doy in tm struct in case date was manually overridden
+  // (Bug found and reported by Jayson Smith jaybird@bluegrasspals.com)
+  doy = day;
+  for(int i = 1; i < month; i++){
+    if(i == 2 && is_leap_year(year))
+      doy += 29;
+    else
+      doy += Days_in_month[i];
+  }
+
   if(isatty(fileno(stdout))){
     fprintf(stderr,"Won't write raw PCM audio to a terminal. Redirect or pipe.\n");
     exit(1);
@@ -281,6 +291,7 @@ int main(int argc,char *argv[]){
     fprintf(stderr,"ut1 offset %d out of range, limited to -7 to +7 tenths\n",dut1);
     dut1 = 0;
   }
+
   Audio = malloc(Samprate*61*sizeof(int16_t));
   Samprate_ms = Samprate/1000; // Samples per ms
 
