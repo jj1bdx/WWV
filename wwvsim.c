@@ -86,17 +86,17 @@ int announce(int startms,char const *message,int female){
     return -1;
   fputs(message,fp);
   fclose(fp);
-#ifdef __linux__
-  if(female){
-    system("espeak -v en-us+f3 -a 70 -f /tmp/speakin --stdout | sox -t wav - -t raw -r 48000 -c 1 -e signed-integer -b 16 /tmp/speakout");
-  } else {
-    system("espeak -v en-us -a 70 -f /tmp/speakin --stdout | sox -t wav - -t raw -r 48000 -c 1 -e signed-integer -b 16 /tmp/speakout");
-  }
-#else // apple
+#ifdef __APPLE__
   if(female){
     system("say -v Samantha --output-file=/tmp/speakout.wav --data-format=LEI16@48000 -f /tmp/speakin;sox /tmp/speakout.wav -t raw -r 48000 -c 1 -b 16 -e signed-integer /tmp/speakout");
   } else {
     system("say -v Alex --output-file=/tmp/speakout.wav --data-format=LEI16@48000 -f /tmp/speakin;sox /tmp/speakout.wav -t raw -r 48000 -c 1 -b 16 -e signed-integer /tmp/speakout");
+  }
+#else // linux
+  if(female){
+    system("espeak -v en-us+f3 -a 70 -f /tmp/speakin --stdout | sox -t wav - -t raw -r 48000 -c 1 -e signed-integer -b 16 /tmp/speakout");
+  } else {
+    system("espeak -v en-us -a 70 -f /tmp/speakin --stdout | sox -t wav - -t raw -r 48000 -c 1 -e signed-integer -b 16 /tmp/speakout");
   }
 #endif
 
