@@ -1,4 +1,4 @@
-// $Id: wwvsim.c,v 1.6 2018/09/10 05:45:37 karn Exp karn $
+// $Id: wwvsim.c,v 1.7 2018/10/18 23:04:44 karn Exp $
 // WWV/WWVH simulator program. Generates their audio program as closely as possible
 // Even supports UT1 offsets and leap second insertion
 // Uses espeak synthesizer for speech announcements; needs a lot of work
