@@ -1,4 +1,4 @@
-// $Id: wwvsim.c,v 1.5 2018/03/12 17:12:37 karn Exp karn $
+// $Id: wwvsim.c,v 1.6 2018/09/10 05:45:37 karn Exp karn $
 // WWV/WWVH simulator program. Generates their audio program as closely as possible
 // Even supports UT1 offsets and leap second insertion
 // Uses espeak synthesizer for speech announcements; needs a lot of work
@@ -290,6 +290,13 @@ int main(int argc,char *argv[]){
   if(dut1 > 7 || dut1 < -7){
     fprintf(stderr,"ut1 offset %d out of range, limited to -7 to +7 tenths\n",dut1);
     dut1 = 0;
+  }
+  if(Positive_leap_second_pending && dut1 > -3){
+    fprintf(stderr,"Postive leap second cancelled since dut1 > -0.3 sec\n");
+    Positive_leap_second_pending = 0;
+  } else if(Negative_leap_second_pending && dut1 < 3){
+    fprintf(stderr,"Negative leap second cancelled since dut1 < +0.3 sec\n");
+    Negative_leap_second_pending = 0;
   }
 
   Audio = malloc(Samprate*61*sizeof(int16_t));
