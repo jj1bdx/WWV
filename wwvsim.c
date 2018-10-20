@@ -1,4 +1,4 @@
-// $Id: wwvsim.c,v 1.7 2018/10/18 23:04:44 karn Exp $
+// $Id: wwvsim.c,v 1.7 2018/10/18 23:04:44 karn Exp karn $
 // WWV/WWVH simulator program. Generates their audio program as closely as possible
 // Even supports UT1 offsets and leap second insertion
 // Uses espeak synthesizer for speech announcements; needs a lot of work
@@ -7,6 +7,17 @@
 
 // July 2017, Phil Karn, KA9Q
 // (Can you tell I have too much spare time?)
+
+// Major rewrite 19 Oct 2018:
+//   Decode generated timecode in verbose mode
+//   When output is terminal, use portaudio to write to sound device with correct (?) timing
+//   Factor out timecode, audio generation and textfile synthesis to more manageable functions
+//   Changes to tone program tables to match actual WWV/WWVH schedule:
+//     no GPS status
+//     will probably require changes when oceanic weather goes away at end of Oct 2018
+
+#define DIRECT 1 // Enable direct on-time output to sound device with portaudio when stdout is a terminal
+
 
 #include <assert.h>
 #include <stdio.h>
@@ -20,11 +31,19 @@
 #include <memory.h>
 #include <sys/time.h>
 #include <locale.h>
+#include <sys/stat.h>
+
+#ifdef DIRECT
+#include <portaudio.h>
+#endif
 
 char Libdir[] = "/usr/local/share/ka9q-radio";
 
 int Samprate = 48000; // Samples per second - try to use this if possible
 int Samprate_ms;      // Samples per millisecond - sampling rates not divisible by 1000 may break
+int Direct_mode;      // Writing directly to audio device
+int WWVH = 0; // WWV by default
+int Verbose = 0;
 
 int Negative_leap_second_pending = 0; // If 1, leap second will be removed at end of June or December, whichever is first
 int Positive_leap_second_pending = 0; // If 1, leap second will be inserted at end of June or December, whichever is first
@@ -48,21 +67,21 @@ int const Days_in_month[] = { // Index 1 = January, 12 = December
 // Tone schedules for each minute of the hour for each station
 // Special exception: no 440 Hz tone in first hour of UTC day; must be handled ad-hoc
 int const WWV_tone_schedule[60] = {
-    0,600,440,600,  0,600,500,600,  0,  0,
-    0,  0,500,600,  0,  0,  0,600,  0,  0,
-  500,600,500,600,500,600,500,600,500,  0,
-    0,600,500,600,500,600,500,600,500,600,
-  500,600,500,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,600,500,600,500,600,500,  0
+    0,600,440,  0,  0,600,500,  0,  0,  0, // 3 is nist reserved at wwvh, 4 reserved at wwv; 8-10 storms; 7 undoc wwv
+    0,  0,500,600,500,600,  0,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
+  500,600,500,600,500,600,500,600,500,  0, // 29 is silent to protect wwvh id
+    0,600,500,600,500,600,500,600,500,600, // 30 is station ID
+  500,600,500,  0,  0,  0,  0,  0,  0,  0, // 43-51 is silent period to protect wwvh
+    0,  0,500,600,500,600,500,600,500,  0  // 59 is silent to protect wwvh id; 52 new special at wwvh, not protected by wwv
 };
 
 int const WWVH_tone_schedule[60] = {
-    0,440,600,  0,600,500,600,500,  0,  0,
-    0,  0,600,500,  0,  0,  0,  0,  0,  0,
-  600,500,600,500,600,500,600,500,600,  0,
-    0,500,600,500,600,500,600,500,600,500,
-  600,500,600,  0,  0,  0,600,  0,  0,  0,
-    0,  0,  0,500,600,500,600,500,600,  0
+    0,440,600,  0,  0,500,600,  0,  0,  0, // 0 silent to protect wwv id; 3 nist reserved; 4 reserved at wwv; 7 protects undoc wwv; 8-10 protects storms at wwv
+    0,  0,600,500,  0,  0,  0,  0,  0,  0, // 14-19 is silent period to protect wwv; 11 silent to protect undoc wwv
+  600,500,600,500,600,500,600,500,600,  0, // 29 is station ID
+    0,500,600,500,600,500,600,500,600,500, // 30 silent to protect wwv id
+  600,500,600,500,600,  0,600,  0,  0,  0, // 43-44 GPS (unused-tones); 45 geoalerts; 47 nist reserved; 48-51 storms
+    0,  0,  0,500,600,500,600,500,600,  0  // 59 is station ID; 52 new special at wwvh?, NOT protected at WWV
 };
 
 
@@ -72,49 +91,104 @@ complex double const csincos(double x){
   return cos(x) + I*sin(x);
 }
 
-int16_t *Audio; // Audio output buffer, 1 minute long
+// Insert PCM audio file into audio output at specified offset
+int announce_audio_file(int16_t *output, char *file, int startms){
+  int r = -1;
+  FILE *fp;  
+  if((fp = fopen(file,"r")) != NULL){
+    r = fread(output+startms*Samprate_ms,sizeof(*output),Samprate_ms*(61000-startms),fp);
+    fclose(fp);
+  }
+  return r;
+}
 
-// Synthesize an audio announcement and insert it into the audio buffer at 'startms' milliseconds within the minute
+// Synthesize speech from a text file and insert into audio output at specified offset
 // Use female = 1 for WWVH, 0 for WWV
-int announce(int startms,char const *message,int female){
+int announce_text_file(int16_t *output,char *file, int startms, int female){
+  int r = -1;
+  char *fullname = NULL;
+  char *command = NULL;
+
+  char tempfile_raw[L_tmpnam];
+  strncpy(tempfile_raw,"/tmp/speakXXXXXXXXXX.raw",sizeof(tempfile_raw));
+  mkstemps(tempfile_raw,4);
+
+#ifdef __APPLE__
+  char tempfile_wav[L_tmpnam];
+  strncpy(tempfile_wav,"/tmp/speakXXXXXXXXXX.wav",sizeof(tempfile_wav));
+  mkstemps(tempfile_wav,4);
+#endif
+
+  if(file[0] == '/')
+    asprintf(&fullname,"%s",file); // Leading slash indicates absolute path name
+  else
+    asprintf(&fullname,"%s/%s",Libdir,file); // Otherwise relative to library directory
+
+  if(!fullname)
+    goto done; // asprintf failed for some reason
+
+  if(access(fullname,R_OK) != 0)
+    goto done; // file isn't readable (what if it's a directory?
+
+  char *voice = NULL;
+
+#ifdef __APPLE__
+  voice = female ? "Samantha" : "Alex";
+  asprintf(&command,"say -v %s --output-file=%s --data-format=LEI16@48000 -f %s; sox %s -t raw -r 48000 -c 1 -b 16 -e signed-integer %s",
+	   voice,tempfile_wav,fullname,tempfile_wav,tempfile_raw);
+
+#else // linux
+  voice = female ? "en-us+f3" : "en-us";
+  asprintf(&command,"espeak -v %s -a 70 -f %s --stdout | sox -t wav - -t raw -r 48000 -c 1 -b 16 -e signed-integer %s",
+	   voice,fullname,tmpfile_raw);
+#endif
+  if(!command)
+    goto done; // asprintf failed somehow
+
+  system(command);
+
+  r = announce_audio_file(output,tempfile_raw, startms);
+
+ done:; // Go here directly on errors
+  // Clean up
+  unlink(tempfile_raw);
+#ifdef __APPLE__
+  unlink(tempfile_wav);
+#endif
+
+  if(command)
+    free(command);
+  if(fullname)
+    free(fullname);
+  return r;
+}
+
+// Synthesize a text announcement and insert into output buffer
+int announce_text(int16_t *output,char const *message,int startms,int female){
   if(startms < 0 || startms >= 61000)
     return -1;
 
-  // Overwrites buffer, so do early
+  char tempfile_txt[L_tmpnam];
+  strncpy(tempfile_txt,"/tmp/speaktxtXXXXXXXXXX.txt",sizeof(tempfile_txt));
+  mkstemps(tempfile_txt,4);
+
   FILE *fp;
-  if ((fp = fopen("/tmp/speakin","w")) == NULL)
+  if ((fp = fopen(tempfile_txt,"w")) == NULL)
     return -1;
   fputs(message,fp);
   fclose(fp);
-#ifdef __APPLE__
-  if(female){
-    system("say -v Samantha --output-file=/tmp/speakout.wav --data-format=LEI16@48000 -f /tmp/speakin;sox /tmp/speakout.wav -t raw -r 48000 -c 1 -b 16 -e signed-integer /tmp/speakout");
-  } else {
-    system("say -v Alex --output-file=/tmp/speakout.wav --data-format=LEI16@48000 -f /tmp/speakin;sox /tmp/speakout.wav -t raw -r 48000 -c 1 -b 16 -e signed-integer /tmp/speakout");
-  }
-#else // linux
-  if(female){
-    system("espeak -v en-us+f3 -a 70 -f /tmp/speakin --stdout | sox -t wav - -t raw -r 48000 -c 1 -e signed-integer -b 16 /tmp/speakout");
-  } else {
-    system("espeak -v en-us -a 70 -f /tmp/speakin --stdout | sox -t wav - -t raw -r 48000 -c 1 -e signed-integer -b 16 /tmp/speakout");
-  }
-#endif
-
-  unlink("/tmp/speakin");
-  if((fp = fopen("/tmp/speakout","r")) == NULL)
-    return -1;
-  fread(Audio+startms*Samprate_ms,sizeof(*Audio),Samprate_ms*(61000-startms),fp);
-  fclose(fp);
-  unlink("/tmp/speakout");
-  return 0;
+  int r = announce_text_file(output,tempfile_txt,startms,female);
+  unlink(tempfile_txt);
+  return r;
 }
+
 
 // Overlay a tone with frequency 'freq' in audio buffer, overwriting whatever was there
 // starting at 'startms' within the minute and stopping one sample before 'stopms'. 
 // Amplitude 1.0 is 100% modulation, 0.5 is 50% modulation, etc
 // Used first for 500/600 Hz continuous audio tones
 // Then used for 1000/1200 Hz minute/hour beeps and second ticks, which pre-empt everything else.
-int overlay_tone(int startms,int stopms,float freq,float amp){
+int overlay_tone(int16_t *output,int startms,int stopms,float freq,float amp){
   if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
     return -1;
 
@@ -122,10 +196,10 @@ int overlay_tone(int startms,int stopms,float freq,float amp){
 
   complex double phase = 1;
   complex double const phase_step = csincos(2*M_PI*freq/Samprate);
-  int16_t *buffer = Audio + startms*Samprate_ms;
+  output += startms*Samprate_ms;
   int samples = (stopms - startms)*Samprate_ms;
   while(samples-- > 0){
-    *buffer++ = cimag(phase) * amp * SHRT_MAX; // imaginary component is sine, real is cosine
+    *output++ = cimag(phase) * amp * SHRT_MAX; // imaginary component is sine, real is cosine
     phase *= phase_step;  // Rotate the tone phasor
   }
  return 0;
@@ -134,7 +208,7 @@ int overlay_tone(int startms,int stopms,float freq,float amp){
 // Same as overlay_tone() except that the tone is added to whatever is already in the audio buffer
 // Take care to avoid overmodulation; the result will be clipped but could still sound bad
 // Used mainly for 100 Hz subcarrier
-int add_tone(int startms,int stopms,float freq,float amp){
+int add_tone(int16_t *output,int startms,int stopms,float freq,float amp){
   if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
     return -1;
 
@@ -142,12 +216,12 @@ int add_tone(int startms,int stopms,float freq,float amp){
 
   complex double phase = 1;
   complex double const phase_step = csincos(2*M_PI*freq/Samprate);
-  int16_t *buffer = Audio + startms*Samprate_ms;
+  output += startms*Samprate_ms;
   int samples = (stopms - startms)*Samprate_ms;
   while(samples-- > 0){
     // Add and clip
-    float const samp = *buffer + cimag(phase) * amp * SHRT_MAX;
-    *buffer++ = samp > 32767 ? 32767 : samp < -32767 ? -32767 : samp;
+    float const samp = *output + cimag(phase) * amp * SHRT_MAX;
+    *output++ = samp > 32767 ? 32767 : samp < -32767 ? -32767 : samp;
     phase *= phase_step; // Rotate the tone phasor
   }
   return 0;
@@ -155,50 +229,298 @@ int add_tone(int startms,int stopms,float freq,float amp){
 
 // Blank out whatever is in the audio buffer starting at startms and ending just before stopms
 // Used mainly to blank out 40 ms guard interval around seconds ticks
-int overlay_silence(int startms,int stopms){
+int overlay_silence(int16_t *output,int startms,int stopms){
   if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
     return -1;
-  int16_t *buffer = Audio + startms*Samprate_ms;
+  output += startms*Samprate_ms;
   int samples = (stopms - startms)*Samprate_ms;
 
   while(samples-- > 0)
-    *buffer++ = 0;
+    *output++ = 0;
 
   return 0;
 }
 
 // Encode a BCD digit in little-endian format (lsb first)
 // NB! Only WWV/WWVH; WWVB uses big-endian format
-void encode_bcd_le(unsigned char *code,int x){
+void encode(unsigned char *code,int x){
   int i;
   for(i=0;i<4;i++){
     code[i] = x & 1;
     x >>= 1;
   }
 }
+int decode(unsigned char *code){
+  int r = 0;
 
-int WWVH = 0; // WWV by default
-int Verbose = 0;
+  for(int i=3; i>=0; i--){
+    r <<= 1;
+    r += code[i];
+  }
+  return r;
+}
+
+
+void maketimecode(unsigned char *code,int dut1,int leap_pending,int year,int month,int day,int hour,int minute){
+    memset(code,0,61*sizeof(*code)); // All bits default to 0
+
+    // Compute day of year
+    // don't use doy in tm struct in case date was manually overridden
+    // (Bug found and reported by Jayson Smith jaybird@bluegrasspals.com)
+    int doy = day;
+    for(int i = 1; i < month; i++){
+      if(i == 2 && is_leap_year(year))
+	doy += 29;
+      else
+	doy += Days_in_month[i];
+    }
+
+    // Only US rules are needed, since WWV/WWVH are American stations
+    // US rules last changed in 2007 to 2nd sunday of March to first sunday in November
+    // Always lasts for 238 days
+    // 2007: 3/11      2008: 3/9      2009: 3/8      2010: 3/14      2011: 3/13      2012: 3/11
+    // 2013: 3/10      2014: 3/9      2015: 3/8      2016: 3/13      2017: 3/12      2018: 3/11
+    // 2019: 3/10      2020: 3/8
+    
+    int dst_start_doy = 0;
+    if(year >= 2007){
+      int ytmp = 2007;
+      int dst_start_dom = 11;
+      for(;ytmp<= year;ytmp++){
+	dst_start_dom--; // One day earlier each year
+	if(is_leap_year(ytmp))
+	  dst_start_dom--; // And an extra day earlier after a leap year february
+	if(dst_start_dom <= 7) // No longer second sunday, slip a week
+	  dst_start_dom += 7;
+      }
+      dst_start_doy = 59 + dst_start_dom;
+      if(is_leap_year(year))
+	dst_start_doy++;
+    }
+    if(dst_start_doy != 0){
+      // DST always lasts for 238 days
+      if(doy > dst_start_doy && doy <= dst_start_doy + 238)
+	code[2] = 1; // DST status at 00:00 UTC
+      if(doy >= dst_start_doy && doy < dst_start_doy + 238)
+	code[55] = 1; // DST status at 24:00 UTC
+    }
+    code[3] = leap_pending;
+    
+    // Year
+    encode(code+4,year % 10); // Least significant digit
+    encode(code+51,(year/10)%10); // Tens digit
+    
+    // Minute of hour, 0-59
+    encode(code+10,minute%10); // Least significant digit
+    encode(code+15,minute/10); // Most significant digit, extends into unused bit 18
+
+    // Hour of day, 0-23
+    encode(code+20,hour%10);   // Least significant digit
+    encode(code+25,hour/10);   // Most significant digit, extends into unused bits 27-28
+
+    // Day of year, 1-366
+    encode(code+30,doy%10);    // Least significant digit
+    encode(code+35,(doy/10)%10); // Middle digit
+    encode(code+40,doy/100);   // High digit, extends into unused bits 42-43
+
+    // UT1 offset, +/-0.0 through 0.7; adjusted after leap second
+    code[50] = (dut1 > 0); // sign
+    encode(code+56,abs(dut1));  // magnitude, extends into marker 59 and is ignored
+}
+void decode_timecode(unsigned char *code,int length){
+
+  for(int s=0;s<length;s++){
+    if((s % 10) == 0 && s < 60)
+      fprintf(stderr,"%02d: ",s);
+    if(s == 0)
+      fputc(' ',stderr);
+    else if((s % 10) == 9)
+      fprintf(stderr,"M");
+    else
+      fputc(code[s] ? '1' : '0',stderr);
+    if(s < 59 && (s % 10 == 9))
+      fputc('\n',stderr);
+  }
+  fputc('\n',stderr);      
+  fprintf(stderr,"year %d%d",decode(code+51),decode(code+4));
+  fprintf(stderr," doy %d%d%d",decode(code+40),decode(code+35),decode(code+30));
+  
+  fprintf(stderr," hour %d%d",decode(code+25),decode(code+20));
+  fprintf(stderr," minute %d%d",decode(code+15),decode(code+10));
+  int dut1 = decode(code+56);
+  if(!code[50])
+    dut1 = -dut1;
+  fprintf(stderr,"; dut1 %+d",dut1);
+  
+  if(code[3])
+    fprintf(stderr,"; leap second pending");
+  
+  if(code[2] == 0 && code[55] == 0)
+    fprintf(stderr,"; DST not in effect");
+  else if(code[2] == 0 && code[55] == 1)
+    fprintf(stderr,"; DST starts today");
+  else if(code[2] == 1 && code[55] == 0)
+    fprintf(stderr,"; DST ends today");
+  else
+    fprintf(stderr,"; DST in effect");	
+  
+  fprintf(stderr,"\n\n");
+}  
+
+
+void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1,int hour,int minute){
+  // Amplitudes
+  // NIST 250-67, p 50
+  const double marker_high_amp = pow(10.,-6.0/20.);
+  const double marker_low_amp = marker_high_amp / 3.3; // NIST 250-67, p 47
+  const double tick_amp = 1.0; // 100%, 0dBFS
+  const double tone_amp = pow(10.,-6.0/20.); // -6 dB
+
+  double tickfreq;
+  if(wwvh)
+    tickfreq = 1200.0;
+  else
+    tickfreq = 1000.0;
+  const double hourbeep = 1500.0; // Both WWV and WWVH
+
+  // Build a minute of audio
+  memset(output,0,length*Samprate*sizeof(*output)); // Clear previous audio
+  
+  // Continuous tone (or silence) from start of second 1 through end of second 44
+  double tone;
+  if(wwvh)
+    tone = WWVH_tone_schedule[minute];
+  else
+    tone = WWV_tone_schedule[minute];
+  
+  // Special case: no 440 Hz tone during hour 0
+  if(tone == 440 && hour == 0)
+    tone = 0;
+  
+  if(tone){
+    add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
+  } else if(wwvh && (minute == 59 || minute == 29)){
+    // WWVH IDs at minute 29 and 59 in female voice
+    announce_text_file(output,"wwvh.txt",1000,1);
+  } else if(!wwvh && (minute == 0 || minute == 30)){
+    // WWV IDs at minute 0 and 30 in male voice
+    announce_text_file(output,"wwv.txt",1000,0);
+  }
+  
+  // Insert minute announcement
+  int nextminute,nexthour; // What are the next hour and minute?
+  nextminute = minute;
+  nexthour = hour;
+  if(++nextminute == 60){
+    nextminute = 0;
+    if(++nexthour == 24)
+      nexthour = 0;
+  }
+  char *message;
+  asprintf(&message,"At the tone, %d %s %d %s Coordinated Universal Time",
+	   nexthour,nexthour == 1 ? "hour" : "hours",
+	   nextminute,nextminute == 1 ? "minute" : "minutes");
+  if(!wwvh)
+    announce_text(output,message,52500,0); // WWV: male voice at 52.5 seconds
+  else
+    announce_text(output,message,45000,1); // WWVH: female voice at 45 seconds
+  free(message); message = NULL;
+
+  // Modulate time code onto 100 Hz subcarrier
+  int s;
+  for(s=1; s<length; s++){ // No subcarrier during second 0 (minute/hour beep)
+    if((s % 10) == 9){
+      add_tone(output,s*1000,s*1000+800,100,marker_high_amp);	 // 800 ms position markers on seconds 9, 19, 29, ...
+      add_tone(output,s*1000+800,s*1000+1000,100,marker_low_amp); 
+    } else if(code[s]){
+      add_tone(output,s*1000,s*1000+500,100,marker_high_amp);	 // 500 ms = 1 bit
+      add_tone(output,s*1000+500,s*1000+1000,100,marker_low_amp);
+    } else {
+      add_tone(output,s*1000,s*1000+200,100,marker_high_amp);	 // 200 ms = 0 bit
+      add_tone(output,s*1000+200,s*1000+1000,100,marker_low_amp);
+    }
+  }
+  
+  // Pre-empt with minute/hour beep and guard interval
+  overlay_tone(output,0,800,minute == 0 ? hourbeep : tickfreq,tick_amp);
+  overlay_silence(output,800,1000);
+  
+  // Pre-empt with second ticks and guard interval
+  for(s=1; s<length; s++){
+    if(s != 29 && s < 59){
+      // No ticks on 29, 59 or 60
+      // Blank with silence from t-10 ms to t+30, total 40 ms
+      overlay_silence(output,1000*s-10,1000*s+30);
+      overlay_tone(output,1000*s,1000*s+5,tickfreq,tick_amp); // 5 ms tick at 100% modulation on second
+    }
+    // Double ticks without guard time for UT1 offset
+    if((dut1 > 0 && s >= 1 && s <= dut1)
+       || (-dut1 > 0 && s >= 9 && s <= 8-dut1)){
+      overlay_tone(output,1000*s+100,1000*s+105,tickfreq,tick_amp); // 5 ms second tick at 100 ms
+    }	  
+  }
+}
+
+
+// Address of malloc'ed audio output buffer, 2 minutes + 1 second long (in case of leap second)
+int16_t *Audio_buffer;
+
+#ifdef DIRECT
+
+int Buffer_length = 60;  // Length of second half of audio buffer, for callback
+volatile PaTime Buffer_start_time; // Portaudio time at start of buffer (even minute boundary)
+PaStream *Stream;
+volatile int Odd = 0;    // True when callback is in second half of audio buffer, false otherwise
+
+// Portaudio callback
+static int pa_callback(const void *inputBuffer, void *outputBuffer,
+		       unsigned long framesPerBuffer,
+		       const PaStreamCallbackTimeInfo* timeInfo,
+		       PaStreamCallbackFlags statusFlags,
+		       void *userData){
+  if(!outputBuffer)
+    return paAbort; // can this happen??
+  
+  // use portaudio time to figure out what to send
+  double curtime = timeInfo->outputBufferDacTime - Buffer_start_time;
+  if(curtime > 60 + Buffer_length){
+    // Wraparound to start of even minute
+    Buffer_start_time += 60 + Buffer_length;
+    curtime -= 60 + Buffer_length;
+  }
+  int16_t *rdptr = Audio_buffer + (int)(curtime * Samprate);
+  int16_t *out = outputBuffer;
+
+  while(framesPerBuffer--){
+    // Check for wraparound in middle of write
+    if(rdptr >= Audio_buffer + (60 + Buffer_length) * Samprate)
+      rdptr = Audio_buffer;
+    *out++ = *rdptr++;
+  }
+  // Indicate where we are to the writing process
+  if(rdptr >= Audio_buffer + 60 * Samprate)
+    Odd = 1;
+  else
+    Odd = 0;
+
+  return paContinue;
+}
+
+#endif
+
 
 int main(int argc,char *argv[]){
   int c;
-  int year,month,day,hour,minute,sec,doy;
-  // Amplitudes
-  const float marker_high_amp = pow(10.,-15.0/20.);
-  const float marker_low_amp = pow(10.,-30.0/20.);
-  const float tick_amp = 1.0; // 100%, 0dBFS
-  const float tone_amp = pow(10.,-6.0/20.); // -6 dB
-
-  // Defaults
-  double tickfreq = 1000.0; // WWV
-  double hourbeep = 1500.0; // Both WWV and WWVH
+  int year,month,day,hour,minute,sec;
   int dut1 = 0;
   int manual_time = 0;
+  double fsec;
 
-  // Use current computer time as default
+  // Use current computer clock time as default
   struct timeval startup_tv;
   gettimeofday(&startup_tv,NULL);
   struct tm const * const tm = gmtime(&startup_tv.tv_sec);
+  fsec = .000001 * startup_tv.tv_usec;
   sec = tm->tm_sec;
   minute = tm->tm_min;
   hour = tm->tm_hour;
@@ -218,7 +540,6 @@ int main(int argc,char *argv[]){
       break;
     case 'H': // Simulate WWVH, otherwise WWV
       WWVH++;
-      tickfreq = 1200;
       break;
     case 'u': // UT1 offset in tenths of a second, +/- 7
       dut1 = strtol(optarg,NULL,0);
@@ -266,21 +587,32 @@ int main(int argc,char *argv[]){
 	      
     }	
   }
-  // Compute day of year
-  // don't use doy in tm struct in case date was manually overridden
-  // (Bug found and reported by Jayson Smith jaybird@bluegrasspals.com)
-  doy = day;
-  for(int i = 1; i < month; i++){
-    if(i == 2 && is_leap_year(year))
-      doy += 29;
-    else
-      doy += Days_in_month[i];
-  }
+  // Allocate an audio buffer >= 2 minutes + 1 second long
+  // Even minutes will use first half, odd minutes second half
+  Audio_buffer = malloc(2*Samprate*61*sizeof(int16_t));
+  memset(Audio_buffer,0,2*Samprate*61*sizeof(int16_t));
+
+  if(manual_time)
+    fsec = 0;
 
   if(isatty(fileno(stdout))){
-    fprintf(stderr,"Won't write raw PCM audio to a terminal. Redirect or pipe.\n");
+#ifdef DIRECT
+    // No output redirection, so use portaudio to write directly to audio hardware with "precise" (?) timing
+    Direct_mode = 1;
+    Pa_Initialize();
+    Pa_OpenDefaultStream(&Stream,0,1,paInt16,48000,48000,pa_callback,NULL); // one whole second?
+    // How about execution latency between gettimeofday() call and here?
+    Buffer_start_time = Pa_GetStreamTime(Stream) - (fsec + sec + ((minute & 1) ? 60 : 0));
+    Pa_StartStream(Stream);
+#else
+    fprintf(stderr,"Won't send PCM to a terminal (direct mode not compiled in)\n");
     exit(1);
+#endif    
+
   }
+
+  if(year < 2007)
+    fprintf(stderr,"Warning: DST rules prior to %d not implemented; DST bits = 0\n",year);    // Punt
 
   if(Positive_leap_second_pending && Negative_leap_second_pending){
     fprintf(stderr,"Positive and negative leap seconds can't both be pending! Both cancelled\n");
@@ -299,35 +631,13 @@ int main(int argc,char *argv[]){
     Negative_leap_second_pending = 0;
   }
 
-  Audio = malloc(Samprate*61*sizeof(int16_t));
   Samprate_ms = Samprate/1000; // Samples per ms
 
-  // Only US rules are needed, since WWV/WWVH are American stations
-  // US rules last changed in 2007 to 2nd sunday of March to first sunday in November
-  // Always lasts for 238 days
-  // 2007: 3/11      2008: 3/9      2009: 3/8      2010: 3/14      2011: 3/13      2012: 3/11
-  // 2013: 3/10      2014: 3/9      2015: 3/8      2016: 3/13      2017: 3/12      2018: 3/11
-  // 2019: 3/10      2020: 3/8
-
-  int dst_start_doy = 0;
-  if(year < 2007){
-    // Punt
-    fprintf(stderr,"Warning: DST rules prior to %d not implemented; DST bits = 0\n",year);
-  } else {
-    int ytmp = 2007;
-    int dst_start_dom = 11;
-    for(;ytmp<= year;ytmp++){
-      dst_start_dom--; // One day earlier each year
-      if(is_leap_year(ytmp))
-	dst_start_dom--; // And an extra day earlier after a leap year february
-      if(dst_start_dom <= 7) // No longer second sunday, slip a week
-	dst_start_dom += 7;
-    }
-    dst_start_doy = 59 + dst_start_dom;
-    if(is_leap_year(year))
-      dst_start_doy++;
-  }
   while(1){
+    // First buffer half for even minutes, latter half for odd minutes
+    // Even minutes are always 60 seconds long
+    int16_t *audio = (minute % 2) ? (Audio_buffer + 60 * Samprate) : Audio_buffer;
+
     int length = 60;    // Default length 60 seconds
     if((month == 6 || month == 12) && hour == 23 && minute == 59){
       if(Positive_leap_second_pending){
@@ -336,177 +646,56 @@ int main(int argc,char *argv[]){
 	length = 59; // Negative leap second
       }
     }
-    // Build a minute of audio
-    memset(Audio,0,61*Samprate*sizeof(*Audio)); // Clear previous audio
-
-    // Continuous tone (or silence) from start of second 1 through end of second 44
-    double tone;
-    if(WWVH)
-      tone = WWVH_tone_schedule[minute];
-    else
-      tone = WWV_tone_schedule[minute];
-    
-    // Special case: no 440 Hz tone during hour 0
-    if(tone == 440 && hour == 0)
-      tone = 0;
-
-    if(tone){
-      add_tone(1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
-    } else if(WWVH && (minute == 59 || minute == 29)){
-      // WWVH IDs at minute 29 and 59 in female voice
-      char fname[PATH_MAX];
-
-      snprintf(fname,sizeof(fname),"%s/%s",Libdir,"wwvh.txt");
-      FILE *fp = fopen(fname,"r");
-      if(fp != NULL){
-	char buffer[10000];
-	int r;
-	r = fread(buffer,sizeof(*buffer),10000,fp);
-	fclose(fp);
-	if(r > 0){
-	  buffer[r] = '\0';
-	  announce(1000,buffer,1);
-	}
-      }
-    } else if(!WWVH && (minute == 0 || minute == 30)){
-      // WWV IDs at minute 0 and 30 in male voice
-      char fname[PATH_MAX];
-
-      snprintf(fname,sizeof(fname),"%s/%s",Libdir,"wwv.txt");
-      FILE *fp = fopen(fname,"r");
-      if(fp != NULL){
-	char buffer[10000];
-	int r;
-
-	r = fread(buffer,sizeof(*buffer),10000,fp);
-	fclose(fp);
-	if(r > 0){
-	  buffer[r] = '\0';
-	  announce(1000,buffer,0);
-	}
-      }
-    }
-
-    // Insert minute announcement
-    int nextminute,nexthour; // What are the next hour and minute?
-    nextminute = minute;
-    nexthour = hour;
-    if(++nextminute == 60){
-      nextminute = 0;
-      if(++nexthour == 24)
-	nexthour = 0;
-    }
-    char message[1024];
-    snprintf(message,sizeof(message),"At the tone, %d %s %d %s Coordinated Universal Time",
-	     nexthour,nexthour == 1 ? "hour" : "hours",
-	     nextminute,nextminute == 1 ? "minute" : "minutes");
-    if(!WWVH)
-      announce(52500,message,0); // WWV: male voice at 52.5 seconds
-    else
-      announce(45000,message,1); // WWVH: female voice at 45 seconds
-
-    // Generate and add 100 Hz timecode
+    // Generate timecode
     unsigned char code[61]; // one extra for a possible leap second
-
-    memset(code,0,sizeof(code)); // All bits default to 0
-    if(dst_start_doy != 0){
-      // DST always lasts for 238 days
-      if(doy > dst_start_doy && doy <= dst_start_doy + 238)
-	code[2] = 1; // DST status at 00:00 UTC
-      if(doy >= dst_start_doy && doy < dst_start_doy + 238)
-	code[55] = 1; // DST status at 24:00 UTC
-    }
-    code[3] = Negative_leap_second_pending || Positive_leap_second_pending;
-
-    // Year
-    encode_bcd_le(code+4,year % 10); // Least significant digit
-    encode_bcd_le(code+51,(year/10)%10); // Tens digit
-
-    // Minute of hour, 0-59
-    encode_bcd_le(code+10,minute%10); // Least significant digit
-    encode_bcd_le(code+15,minute/10); // Most significant digit, extends into unused bit 18
-
-    // Hour of day, 0-23
-    encode_bcd_le(code+20,hour%10);   // Least significant digit
-    encode_bcd_le(code+25,hour/10);   // Most significant digit, extends into unused bits 27-28
-
-    // Day of year, 1-366
-    encode_bcd_le(code+30,doy%10);    // Least significant digit
-    encode_bcd_le(code+35,(doy/10)%10); // Middle digit
-    encode_bcd_le(code+40,doy/100);   // High digit, extends into unused bits 42-43
-
-    // UT1 offset, +/-0.0 through 0.7; adjusted after leap second
-    code[50] = (dut1 > 0); // sign
-    encode_bcd_le(code+56,abs(dut1));  // magnitude, extends into marker 59 and is ignored
-
-    // Modulate time code onto 100 Hz subcarrier
-    int s;
-    for(s=1;s<61;s++){ // No subcarrier during second 0 (minute/hour beep)
-      if((s % 10) == 9){
-	add_tone(s*1000,s*1000+800,100,marker_high_amp);	 // 800 ms markers @ -15 dBFS
-	add_tone(s*1000+800,s*1000+1000,100,marker_low_amp);     // rest of tone at -30 dBFS
-      } else if(code[s]){
-	add_tone(s*1000,s*1000+500,100,marker_high_amp);	 // 500 ms = 1 bit
-	add_tone(s*1000+500,s*1000+1000,100,marker_low_amp);
-      } else {
-	add_tone(s*1000,s*1000+200,100,marker_high_amp);	 // 200 ms = 0 bit
-	add_tone(s*1000+200,s*1000+1000,100,marker_low_amp);
-      }
-    }
-
-    // Pre-empt with minute/hour beep and guard interval
-    overlay_tone(0,800,minute == 0 ? hourbeep : tickfreq,tick_amp);
-    overlay_silence(800,1000);
+    int leap_pending = (Positive_leap_second_pending || Negative_leap_second_pending) ? 1 : 0;
+    maketimecode(code,dut1,leap_pending,year,month,day,hour,minute);
     
-    // Pre-empt with second ticks and guard interval
-    for(s=1;s<60;s++){
-      if(s != 29 && s != 59){ // No ticks on 29 and 59 (or 60)
-	overlay_silence(1000*s-10,1000*s);          // 10 ms of silence at end of previous second (OK because we start with s=1)
-	overlay_tone(1000*s,1000*s+5,tickfreq,tick_amp); // 5 ms tick at 100% modulation on second
-	overlay_silence(1000*s+5,1000*s+30);        // 25 ms of silence after the tick
-	// Double ticks without guard time for UT1 offset
-	if((dut1 > 0 && s >= 1 && s <= dut1)
-	   || (-dut1 > 0 && s >= 9 && s <= 8-dut1)){
-	  overlay_tone(1000*s+100,1000*s+105,tickfreq,tick_amp); // 5 ms second tick at 100 ms
-	}	  
-      }
-    }
+    // Optionally dump timecode
     if(Verbose){
-      fprintf(stderr,"%d/%d/%d %02d:%02d:%02d\n",month,day,year,hour,minute,sec);
-      int s;
-      for(s=0;s<length;s++){
-	if((s % 10) == 0 && s < 60)
-	  fprintf(stderr,"%02d: ",s);
-	if(s == 0)
-	  fputc(' ',stderr);
-	else if((s % 10) == 9)
-	  fprintf(stderr,"M");
-	else
-	  fputc(code[s] ? '1' : '0',stderr);
-	if(s < 59 && (s % 10 == 9))
-	  fputc('\n',stderr);
-      }
-      fputc('\n',stderr);      
+      fprintf(stderr,"%d/%d/%d %02d:%02d\n",month,day,year,hour,minute);
+      decode_timecode(code,length);
     }
 
-    int samplenum = 0;
-    if(!manual_time){
-      // Find time interval since startup, trim that many samples from the beginning of the buffer so we are on time
-      struct timeval tv;
-      gettimeofday(&tv,NULL);
-      int startup_delay = 1000000*(tv.tv_sec - startup_tv.tv_sec) +
-	tv.tv_usec - startup_tv.tv_usec;
-      
-      if(Verbose)
-	fprintf(stderr,"startup delay %'d usec\n",startup_delay);
-      samplenum = (Samprate_ms * startup_delay) / 1000;
-      manual_time = 1; // do this only first time
+    // Build a minute of audio
+    makeminute(audio,length,WWVH,code,dut1,hour,minute);
+
+#ifdef DIRECT
+    if(!Direct_mode){
+#endif
+      int samplenum = 0;
+      if(!manual_time){
+	// Find time interval since startup, trim that many samples from the beginning of the buffer so we are on time
+	struct timeval tv;
+	gettimeofday(&tv,NULL);
+	int startup_delay = 1000000*(tv.tv_sec - startup_tv.tv_sec) +
+	  tv.tv_usec - startup_tv.tv_usec;
+	
+	if(Verbose)
+	  fprintf(stderr,"startup delay %'d usec\n",startup_delay);
+	samplenum = (Samprate_ms * startup_delay) / 1000;
+	manual_time = 1; // do this only first time
+      }
+      // Write the constructed buffer, minus startup delay plus however many seconds
+      // have already elapsed since the minute. This happens only at startup;
+      // on all subsequent minutes the entire buffer will be written
+      fwrite(audio+samplenum+sec*Samprate,sizeof(*audio),
+	     Samprate * (length-sec) - samplenum,stdout);
+
+#ifdef DIRECT
+    } else {
+      if(minute & 1){
+	// Just wrote odd minute
+	Buffer_length = length;
+	while(!Odd)
+	  sleep(1); // wait for callback to leave even half before rewriting it
+      } else {
+	// Just wrote even minute
+	while(Odd)
+	  sleep(1); // wait for callback to leave odd half before rewriting it
+      }
     }
-    // Write the constructed buffer, minus startup delay plus however many seconds
-    // have already elapsed since the minute. This happens only at startup;
-    // on all subsequent minutes the entire buffer will be written
-    fwrite(Audio+samplenum+sec*Samprate,sizeof(*Audio),
-	   Samprate * (length-sec) - samplenum,stdout);
+#endif
 
     if(length == 61){
       // Leap second just occurred in this last minute
@@ -524,7 +713,6 @@ int main(int argc,char *argv[]){
       if(++hour > 23){
 	// New day
 	hour = 0;
-	doy++;
 	if(++day > ((month == 2 && is_leap_year(year))? 29 : Days_in_month[month])){
 	  // New month
 	  day = 1;
@@ -532,11 +720,15 @@ int main(int argc,char *argv[]){
 	    // New year
 	    month = 1;
 	    ++year;
-	    doy = 1;
 	  }
 	}
       }
     }
+    // Advance buffer pointer for next minute, allowing for leap second in current minute
+    // Actually this is unnecessary since only minute 59 can have a leap second at the end,
+    // and 59 is odd
+    // minute is new value, length is old value
+    audio = (minute & 2) ? (Audio_buffer + length * Samprate) : Audio_buffer;
   }
 }
 
