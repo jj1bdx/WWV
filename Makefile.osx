@@ -1,0 +1,20 @@
+# $Id: Makefile.osx,v 1.5 2017/09/26 17:26:35 karn Exp karn $ Makefile for standalone WWV/WWVH program
+INCLUDES=-I /opt/local/include
+BINDIR=/usr/local/bin
+LIBDIR=/usr/local/share/ka9q-radio
+CFLAGS=-g -O2 $(INCLUDES)
+
+all:	wwvsim wwv.txt wwvh.txt
+
+clean:
+	rm -f *.o wwvsim
+	rcsclean
+
+install: wwvsim	
+	install -d $(BINDIR)
+	install -d $(LIBDIR)
+	install wwvsim $(BINDIR)
+	install wwv.txt wwvh.txt $(LIBDIR)
+
+wwvsim: wwvsim.o
+	$(CC) -g -o $@ $^ -lportaudio -lm
