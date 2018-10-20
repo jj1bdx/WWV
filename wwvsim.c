@@ -1,4 +1,4 @@
-// $Id: wwvsim.c,v 1.8 2018/10/20 09:05:48 karn Exp $
+// $Id: wwvsim.c,v 1.9 2018/10/20 10:51:35 karn Exp $
 // WWV/WWVH simulator program. Generates their audio program as closely as possible
 // Even supports UT1 offsets and leap second insertion
 // Uses espeak synthesizer for speech announcements; needs a lot of work
@@ -140,7 +140,7 @@ int announce_text_file(int16_t *output,char *file, int startms, int female){
 #else // linux
   voice = female ? "en-us+f3" : "en-us";
   asprintf(&command,"espeak -v %s -a 70 -f %s --stdout | sox -t wav - -t raw -r 48000 -c 1 -b 16 -e signed-integer %s",
-	   voice,fullname,tmpfile_raw);
+	   voice,fullname,tempfile_raw);
 #endif
   if(!command)
     goto done; // asprintf failed somehow
@@ -602,7 +602,7 @@ int main(int argc,char *argv[]){
     // No output redirection, so use portaudio to write directly to audio hardware with "precise" (?) timing
     Direct_mode = 1;
     Pa_Initialize();
-    Pa_OpenDefaultStream(&Stream,0,1,paInt16,48000,48000,pa_callback,NULL); // one whole second?
+    Pa_OpenDefaultStream(&Stream,0,1,paInt16,(double)Samprate,48000,pa_callback,NULL); // one whole second?
     // How about execution latency between gettimeofday() call and here?
     Buffer_start_time = Pa_GetStreamTime(Stream) - (fsec + sec + ((minute & 1) ? 60 : 0));
     Pa_StartStream(Stream);
