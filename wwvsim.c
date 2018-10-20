@@ -1,4 +1,4 @@
-// $Id: wwvsim.c,v 1.7 2018/10/18 23:04:44 karn Exp karn $
+// $Id: wwvsim.c,v 1.8 2018/10/20 09:05:48 karn Exp $
 // WWV/WWVH simulator program. Generates their audio program as closely as possible
 // Even supports UT1 offsets and leap second insertion
 // Uses espeak synthesizer for speech announcements; needs a lot of work
@@ -372,7 +372,9 @@ void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1
   // Amplitudes
   // NIST 250-67, p 50
   const double marker_high_amp = pow(10.,-6.0/20.);
-  const double marker_low_amp = marker_high_amp / 3.3; // NIST 250-67, p 47
+  //  NIST 250-67, p 47 says 1/3.3 (about -10 dB) but is apparently incorrect; observed is ~ -20 dB
+  //  const double marker_low_amp = marker_high_amp / 3.3;
+  const double marker_low_amp = marker_high_amp / 10;
   const double tick_amp = 1.0; // 100%, 0dBFS
   const double tone_amp = pow(10.,-6.0/20.); // -6 dB
 
@@ -448,7 +450,7 @@ void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1
   // Pre-empt with second ticks and guard interval
   for(s=1; s<length; s++){
     if(s != 29 && s < 59){
-      // No ticks on 29, 59 or 60
+      // No ticks or blanking on 29, 59 or 60
       // Blank with silence from t-10 ms to t+30, total 40 ms
       overlay_silence(output,1000*s-10,1000*s+30);
       overlay_tone(output,1000*s,1000*s+5,tickfreq,tick_amp); // 5 ms tick at 100% modulation on second
