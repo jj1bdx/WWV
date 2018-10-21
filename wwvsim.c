@@ -1,4 +1,4 @@
-// $Id: wwvsim.c,v 1.9 2018/10/20 10:51:35 karn Exp $
+// $Id: wwvsim.c,v 1.9 2018/10/20 10:51:35 karn Exp karn $
 // WWV/WWVH simulator program. Generates their audio program as closely as possible
 // Even supports UT1 offsets and leap second insertion
 // Uses espeak synthesizer for speech announcements; needs a lot of work
@@ -93,7 +93,11 @@ complex double const csincos(double x){
 
 // Insert PCM audio file into audio output at specified offset
 int announce_audio_file(int16_t *output, char *file, int startms){
+  if(startms < 0 || startms >= 61000)
+    return -1;
+
   int r = -1;
+
   FILE *fp;  
   if((fp = fopen(file,"r")) != NULL){
     r = fread(output+startms*Samprate_ms,sizeof(*output),Samprate_ms*(61000-startms),fp);
@@ -165,8 +169,6 @@ int announce_text_file(int16_t *output,char *file, int startms, int female){
 
 // Synthesize a text announcement and insert into output buffer
 int announce_text(int16_t *output,char const *message,int startms,int female){
-  if(startms < 0 || startms >= 61000)
-    return -1;
 
   char tempfile_txt[L_tmpnam];
   strncpy(tempfile_txt,"/tmp/speaktxtXXXXXXXXXX.txt",sizeof(tempfile_txt));
@@ -189,7 +191,7 @@ int announce_text(int16_t *output,char const *message,int startms,int female){
 // Used first for 500/600 Hz continuous audio tones
 // Then used for 1000/1200 Hz minute/hour beeps and second ticks, which pre-empt everything else.
 int overlay_tone(int16_t *output,int startms,int stopms,float freq,float amp){
-  if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+  if(startms < 0 || stopms <= startms || stopms > 61000)
     return -1;
 
   assert((startms * (int)freq % 1000) == 0); // All tones start with a positive zero crossing?
@@ -209,7 +211,7 @@ int overlay_tone(int16_t *output,int startms,int stopms,float freq,float amp){
 // Take care to avoid overmodulation; the result will be clipped but could still sound bad
 // Used mainly for 100 Hz subcarrier
 int add_tone(int16_t *output,int startms,int stopms,float freq,float amp){
-  if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+  if(startms < 0 || stopms <= startms || stopms > 61000)
     return -1;
 
   assert((startms * (int)freq % 1000) == 0); // All tones start with a positive zero crossing?
@@ -230,7 +232,7 @@ int add_tone(int16_t *output,int startms,int stopms,float freq,float amp){
 // Blank out whatever is in the audio buffer starting at startms and ending just before stopms
 // Used mainly to blank out 40 ms guard interval around seconds ticks
 int overlay_silence(int16_t *output,int startms,int stopms){
-  if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+  if(startms < 0 || stopms <= startms || stopms > 61000)
     return -1;
   output += startms*Samprate_ms;
   int samples = (stopms - startms)*Samprate_ms;
@@ -255,12 +257,13 @@ int decode(unsigned char *code){
 
   for(int i=3; i>=0; i--){
     r <<= 1;
+    assert(code[i] == 0 || code[i] == 1);
     r += code[i];
   }
   return r;
 }
 
-
+// Construct time code as array of **61** unsigned chars with values 0 or 1
 void maketimecode(unsigned char *code,int dut1,int leap_pending,int year,int month,int day,int hour,int minute){
     memset(code,0,61*sizeof(*code)); // All bits default to 0
 
@@ -327,8 +330,9 @@ void maketimecode(unsigned char *code,int dut1,int leap_pending,int year,int mon
     code[50] = (dut1 > 0); // sign
     encode(code+56,abs(dut1));  // magnitude, extends into marker 59 and is ignored
 }
-void decode_timecode(unsigned char *code,int length){
 
+// Decode frame of timecode to stderr for debugging
+void decode_timecode(unsigned char *code,int length){
   for(int s=0;s<length;s++){
     if((s % 10) == 0 && s < 60)
       fprintf(stderr,"%02d: ",s);
@@ -355,14 +359,14 @@ void decode_timecode(unsigned char *code,int length){
   if(code[3])
     fprintf(stderr,"; leap second pending");
   
-  if(code[2] == 0 && code[55] == 0)
-    fprintf(stderr,"; DST not in effect");
-  else if(code[2] == 0 && code[55] == 1)
+  if(code[2] && code[55])
+    fprintf(stderr,"; DST in effect");
+  else if(!code[2] && code[55])
     fprintf(stderr,"; DST starts today");
-  else if(code[2] == 1 && code[55] == 0)
+  else if(code[2]  && !code[55])
     fprintf(stderr,"; DST ends today");
   else
-    fprintf(stderr,"; DST in effect");	
+    fprintf(stderr,"; DST not in effect");	
   
   fprintf(stderr,"\n\n");
 }  
@@ -469,11 +473,10 @@ int16_t *Audio_buffer;
 
 #ifdef DIRECT
 
-int Buffer_length = 60;  // Length of second half of audio buffer, for callback
+volatile int Odd_minute_length = 60; // 59 or 61 if leap second pending at end of current odd minute
 volatile PaTime Buffer_start_time; // Portaudio time at start of buffer (even minute boundary)
 PaStream *Stream;
-volatile int Odd = 0;    // True when callback is in second half of audio buffer, false otherwise
-
+volatile int Buffers;
 // Portaudio callback
 static int pa_callback(const void *inputBuffer, void *outputBuffer,
 		       unsigned long framesPerBuffer,
@@ -482,29 +485,27 @@ static int pa_callback(const void *inputBuffer, void *outputBuffer,
 		       void *userData){
   if(!outputBuffer)
     return paAbort; // can this happen??
-  
-  // use portaudio time to figure out what to send
-  double curtime = timeInfo->outputBufferDacTime - Buffer_start_time;
-  if(curtime > 60 + Buffer_length){
-    // Wraparound to start of even minute
-    Buffer_start_time += 60 + Buffer_length;
-    curtime -= 60 + Buffer_length;
-  }
-  int16_t *rdptr = Audio_buffer + (int)(curtime * Samprate);
+
+  // use portaudio time to figure out from where to send
+  int16_t *rdptr = Audio_buffer + (int)(Samprate * (timeInfo->outputBufferDacTime - Buffer_start_time));
   int16_t *out = outputBuffer;
+  int in_low_half = rdptr < Audio_buffer + (60 * Samprate);
 
   while(framesPerBuffer--){
-    // Check for wraparound in middle of write
-    if(rdptr >= Audio_buffer + (60 + Buffer_length) * Samprate)
-      rdptr = Audio_buffer;
+    if(!in_low_half && rdptr >= Audio_buffer + (60 + Odd_minute_length) * Samprate){
+      // Wrapped back to beginning
+      in_low_half = 1;
+      rdptr -= (60 + Odd_minute_length) * Samprate;
+      Buffer_start_time += 60.0 + Odd_minute_length;
+      Odd_minute_length = 60; // Reset to normal after possible leap second
+      Buffers--;
+    } else if(in_low_half && rdptr >= Audio_buffer + 60 * Samprate){
+      // Passed halfway mark
+      in_low_half = 0;
+      Buffers--;
+    }
     *out++ = *rdptr++;
   }
-  // Indicate where we are to the writing process
-  if(rdptr >= Audio_buffer + 60 * Samprate)
-    Odd = 1;
-  else
-    Odd = 0;
-
   return paContinue;
 }
 
@@ -568,6 +569,7 @@ int main(int argc,char *argv[]){
       break;
     case 's': // Manual second setting
       sec = strtol(optarg,NULL,0);
+      fsec = 0;
       manual_time++;
       break;
     case 'L':
@@ -593,9 +595,6 @@ int main(int argc,char *argv[]){
   // Even minutes will use first half, odd minutes second half
   Audio_buffer = malloc(2*Samprate*61*sizeof(int16_t));
   memset(Audio_buffer,0,2*Samprate*61*sizeof(int16_t));
-
-  if(manual_time)
-    fsec = 0;
 
   if(isatty(fileno(stdout))){
 #ifdef DIRECT
@@ -686,16 +685,12 @@ int main(int argc,char *argv[]){
 
 #ifdef DIRECT
     } else {
-      if(minute & 1){
-	// Just wrote odd minute
-	Buffer_length = length;
-	while(!Odd)
-	  sleep(1); // wait for callback to leave even half before rewriting it
-      } else {
-	// Just wrote even minute
-	while(Odd)
-	  sleep(1); // wait for callback to leave odd half before rewriting it
-      }
+      Buffers++;
+      if((minute & 1) && length != 60)
+	Odd_minute_length = length;	// Just wrote odd minute with leap second at end
+
+      while(Buffers > 1)
+	sleep(1);
     }
 #endif
 
@@ -726,11 +721,6 @@ int main(int argc,char *argv[]){
 	}
       }
     }
-    // Advance buffer pointer for next minute, allowing for leap second in current minute
-    // Actually this is unnecessary since only minute 59 can have a leap second at the end,
-    // and 59 is odd
-    // minute is new value, length is old value
-    audio = (minute & 2) ? (Audio_buffer + length * Samprate) : Audio_buffer;
   }
 }
 
