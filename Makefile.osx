@@ -1,8 +1,8 @@
 # $Id: Makefile.osx,v 1.5 2017/09/26 17:26:35 karn Exp karn $ Makefile for standalone WWV/WWVH program
 INCLUDES=-I /opt/local/include
 BINDIR=/usr/local/bin
-WWVDIR=/usr/local/share/ka9q-radio/wwv
-WWVHDIR=/usr/local/share/ka9q-radio/wwvh
+WWV_DIR=/usr/local/share/ka9q-radio/wwv
+WWVH_DIR=/usr/local/share/ka9q-radio/wwvh
 CFLAGS=-g -O2 $(INCLUDES)
 
 all:	wwvsim
@@ -13,19 +13,19 @@ clean:
 
 install: wwvsim	
 	install -d $(BINDIR)
-	install -d $(WWVDIR)
-	install -d $(WWVHDIR)	
+	install -d $(WWV_DIR)
+	install -d $(WWVH_DIR)	
 	install wwvsim $(BINDIR)
-	install wwv-id.txt wwv-id.raw $(WWVDIR)
-	install wwvh-id.txt wwvh-id.raw $(WWVHDIR)
-	ln -f $(WWVDIR)/wwv-id.raw $(WWVDIR)/0.raw
-	ln -f $(WWVDIR)/wwv-id.txt $(WWVDIR)/0.txt
-	ln -f $(WWVDIR)/wwv-id.raw $(WWVDIR)/30.raw
-	ln -f $(WWVDIR)/wwv-id.txt $(WWVDIR)/30.txt
-	ln -f $(WWVHDIR)/wwvh-id.raw $(WWVHDIR)/29.raw
-	ln -f $(WWVHDIR)/wwvh-id.txt $(WWVHDIR)/29.txt
-	ln -f $(WWVHDIR)/wwvh-id.raw $(WWVHDIR)/59.raw
-	ln -f $(WWVHDIR)/wwvh-id.txt $(WWVHDIR)/59.txt
+	install wwv-id.txt wwv-id.raw $(WWV_DIR)
+	install wwvh-id.txt wwvh-id.raw $(WWVH_DIR)
+	ln -f $(WWV_DIR)/wwv-id.raw $(WWV_DIR)/0.raw
+	ln -f $(WWV_DIR)/wwv-id.txt $(WWV_DIR)/0.txt
+	ln -f $(WWV_DIR)/wwv-id.raw $(WWV_DIR)/30.raw
+	ln -f $(WWV_DIR)/wwv-id.txt $(WWV_DIR)/30.txt
+	ln -f $(WWVH_DIR)/wwvh-id.raw $(WWVH_DIR)/29.raw
+	ln -f $(WWVH_DIR)/wwvh-id.txt $(WWVH_DIR)/29.txt
+	ln -f $(WWVH_DIR)/wwvh-id.raw $(WWVH_DIR)/59.raw
+	ln -f $(WWVH_DIR)/wwvh-id.txt $(WWVH_DIR)/59.txt
 
 wwvsim: wwvsim.o
 	$(CC) -g -o $@ $^ -lportaudio -lm
