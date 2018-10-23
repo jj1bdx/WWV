@@ -1,4 +1,4 @@
-// $Id: wwvsim.c,v 1.9 2018/10/20 10:51:35 karn Exp karn $
+// $Id: wwvsim.c,v 1.10 2018/10/21 23:03:40 karn Exp karn $
 // WWV/WWVH simulator program. Generates their audio program as closely as possible
 // Even supports UT1 offsets and leap second insertion
 // Uses espeak synthesizer for speech announcements; needs a lot of work
@@ -18,7 +18,7 @@
 
 #define DIRECT 1 // Enable direct on-time output to sound device with portaudio when stdout is a terminal
 
-
+#define _GNU_SOURCE
 #include <assert.h>
 #include <stdio.h>
 #include <math.h>
@@ -123,30 +123,32 @@ int announce_text_file(int16_t *output,char *file, int startms, int female){
   mkstemps(tempfile_wav,4);
 #endif
 
+  int asr = -1;
   if(file[0] == '/')
-    asprintf(&fullname,"%s",file); // Leading slash indicates absolute path name
+    asr = asprintf(&fullname,"%s",file); // Leading slash indicates absolute path name
   else
-    asprintf(&fullname,"%s/%s",Libdir,file); // Otherwise relative to library directory
+    asr = asprintf(&fullname,"%s/%s",Libdir,file); // Otherwise relative to library directory
 
-  if(!fullname)
+  if(asr == -1 || !fullname)
     goto done; // asprintf failed for some reason
 
   if(access(fullname,R_OK) != 0)
     goto done; // file isn't readable (what if it's a directory?
 
   char *voice = NULL;
+  asr = -1;
 
 #ifdef __APPLE__
   voice = female ? "Samantha" : "Alex";
-  asprintf(&command,"say -v %s --output-file=%s --data-format=LEI16@48000 -f %s; sox %s -t raw -r 48000 -c 1 -b 16 -e signed-integer %s",
+  asr = asprintf(&command,"say -v %s --output-file=%s --data-format=LEI16@48000 -f %s; sox %s -t raw -r 48000 -c 1 -b 16 -e signed-integer %s",
 	   voice,tempfile_wav,fullname,tempfile_wav,tempfile_raw);
 
 #else // linux
   voice = female ? "en-us+f3" : "en-us";
-  asprintf(&command,"espeak -v %s -a 70 -f %s --stdout | sox -t wav - -t raw -r 48000 -c 1 -b 16 -e signed-integer %s",
+  asr = asprintf(&command,"espeak -v %s -a 70 -f %s --stdout | sox -t wav - -t raw -r 48000 -c 1 -b 16 -e signed-integer %s",
 	   voice,fullname,tempfile_raw);
 #endif
-  if(!command)
+  if(asr == -1 || !command)
     goto done; // asprintf failed somehow
 
   system(command);
@@ -171,7 +173,7 @@ int announce_text_file(int16_t *output,char *file, int startms, int female){
 int announce_text(int16_t *output,char const *message,int startms,int female){
 
   char tempfile_txt[L_tmpnam];
-  strncpy(tempfile_txt,"/tmp/speaktxtXXXXXXXXXX.txt",sizeof(tempfile_txt));
+  strncpy(tempfile_txt,"/tmp/speakXXXXXXXXXX.txt",sizeof(tempfile_txt));
   mkstemps(tempfile_txt,4);
 
   FILE *fp;
@@ -327,7 +329,7 @@ void maketimecode(unsigned char *code,int dut1,int leap_pending,int year,int mon
     encode(code+40,doy/100);   // High digit, extends into unused bits 42-43
 
     // UT1 offset, +/-0.0 through 0.7; adjusted after leap second
-    code[50] = (dut1 > 0); // sign
+    code[50] = (dut1 >= 0); // sign
     encode(code+56,abs(dut1));  // magnitude, extends into marker 59 and is ignored
 }
 
@@ -371,6 +373,42 @@ void decode_timecode(unsigned char *code,int length){
   fprintf(stderr,"\n\n");
 }  
 
+// Insert tone or announcement into seconds 1-44
+void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minute){
+  const double tone_amp = pow(10.,-6.0/20.); // -6 dB
+
+  // A raw audio file pre-empts everything else
+  char *rawfilename = NULL;
+  char *textfilename = NULL;
+  
+  if(asprintf(&rawfilename,"%s/%s/%d.raw",Libdir,wwvh ? "wwvh" : "wwv",minute)
+     && access(rawfilename,R_OK) == 0){
+    announce_audio_file(output,rawfilename,1000);
+    goto done;
+  } else if(asprintf(&textfilename,"%s/%s/%d.txt",Libdir,wwvh ? "wwvh" : "wwv",minute)
+	    && access(textfilename,R_OK) == 0){
+    announce_text_file(output,textfilename,1000,wwvh);
+    goto done;
+  } else {
+    // Otherwise generate a tone, unless silent
+    double tone = wwvh ? WWVH_tone_schedule[minute] : WWV_tone_schedule[minute];
+    
+    // Special case: no 440 Hz tone during hour 0
+    if(tone == 440 && hour == 0)
+      tone = 0;
+    
+    if(tone)
+      add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
+  }
+
+ done:;
+  if(rawfilename)
+    free(rawfilename);
+  if(textfilename)
+    free(textfilename);
+}
+
+
 
 void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1,int hour,int minute){
   // Amplitudes
@@ -380,38 +418,13 @@ void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1
   //  const double marker_low_amp = marker_high_amp / 3.3;
   const double marker_low_amp = marker_high_amp / 10;
   const double tick_amp = 1.0; // 100%, 0dBFS
-  const double tone_amp = pow(10.,-6.0/20.); // -6 dB
 
-  double tickfreq;
-  if(wwvh)
-    tickfreq = 1200.0;
-  else
-    tickfreq = 1000.0;
+  const double tickfreq = wwvh ? 1200.0 : 1000.0;
   const double hourbeep = 1500.0; // Both WWV and WWVH
 
   // Build a minute of audio
   memset(output,0,length*Samprate*sizeof(*output)); // Clear previous audio
-  
-  // Continuous tone (or silence) from start of second 1 through end of second 44
-  double tone;
-  if(wwvh)
-    tone = WWVH_tone_schedule[minute];
-  else
-    tone = WWV_tone_schedule[minute];
-  
-  // Special case: no 440 Hz tone during hour 0
-  if(tone == 440 && hour == 0)
-    tone = 0;
-  
-  if(tone){
-    add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
-  } else if(wwvh && (minute == 59 || minute == 29)){
-    // WWVH IDs at minute 29 and 59 in female voice
-    announce_text_file(output,"wwvh.txt",1000,1);
-  } else if(!wwvh && (minute == 0 || minute == 30)){
-    // WWV IDs at minute 0 and 30 in male voice
-    announce_text_file(output,"wwv.txt",1000,0);
-  }
+  gen_tone_or_announcement(output,wwvh,hour,minute);
   
   // Insert minute announcement
   int nextminute,nexthour; // What are the next hour and minute?
@@ -422,15 +435,18 @@ void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1
     if(++nexthour == 24)
       nexthour = 0;
   }
-  char *message;
-  asprintf(&message,"At the tone, %d %s %d %s Coordinated Universal Time",
+  char *message = NULL;
+  int asr = -1;
+  asr = asprintf(&message,"At the tone, %d %s %d %s Coordinated Universal Time",
 	   nexthour,nexthour == 1 ? "hour" : "hours",
 	   nextminute,nextminute == 1 ? "minute" : "minutes");
-  if(!wwvh)
-    announce_text(output,message,52500,0); // WWV: male voice at 52.5 seconds
-  else
-    announce_text(output,message,45000,1); // WWVH: female voice at 45 seconds
-  free(message); message = NULL;
+  if(asr != -1 && message){
+    if(!wwvh)
+      announce_text(output,message,52500,0); // WWV: male voice at 52.5 seconds
+    else
+      announce_text(output,message,45000,1); // WWVH: female voice at 45 seconds
+    free(message); message = NULL;
+  }
 
   // Modulate time code onto 100 Hz subcarrier
   int s;
