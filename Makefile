@@ -4,7 +4,7 @@ WWVDIR=/usr/local/share/ka9q-radio/wwv
 WWVHDIR=/usr/local/share/ka9q-radio/wwvh
 CFLAGS=-g -O2 -I/opt/local/include
 
-all:	wwvsim wwv.txt wwvh.txt
+all:	wwvsim
 
 clean:
 	rm -f *.o wwvsim
