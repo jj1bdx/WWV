@@ -1,4 +1,7 @@
+*Note*: this repository was originally posted as `ka9q/WWV`, but the original repository is gone.
+
 # WWV
+
 WWV/WWVH emulator. Full format including 100 Hz timecode. Speech by local OS's synthesizer; OSX is best
 
 This started as a quick hack but ended up fully functional. The program generates raw 16-bit linear PCM mono audio at a
