@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.7 2018/10/20 02:59:16 karn Exp karn $ Makefile for standalone WWV/WWVH program
+# $Id: Makefile,v 1.8 2018/11/22 10:01:04 karn Exp $ Makefile for standalone WWV/WWVH program
 BINDIR=/usr/local/bin
 WWV_DIR=/usr/local/share/ka9q-radio/wwv
 WWVH_DIR=/usr/local/share/ka9q-radio/wwvh

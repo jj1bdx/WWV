@@ -1,4 +1,4 @@
-# $Id: Makefile.osx,v 1.5 2017/09/26 17:26:35 karn Exp karn $ Makefile for standalone WWV/WWVH program
+# $Id: Makefile.osx,v 1.6 2018/11/22 10:00:54 karn Exp $ Makefile for standalone WWV/WWVH program
 INCLUDES=-I /opt/local/include
 BINDIR=/usr/local/bin
 WWV_DIR=/usr/local/share/ka9q-radio/wwv

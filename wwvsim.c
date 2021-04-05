@@ -1,4 +1,4 @@
-// $Id: wwvsim.c,v 1.10 2018/10/21 23:03:40 karn Exp karn $
+// $Id: wwvsim.c,v 1.13 2018/11/07 19:24:47 karn Exp $
 // WWV/WWVH simulator program. Generates their audio program as closely as possible
 // Even supports UT1 offsets and leap second insertion
 // Uses espeak synthesizer for speech announcements; needs a lot of work
@@ -67,8 +67,8 @@ int const Days_in_month[] = { // Index 1 = January, 12 = December
 // Tone schedules for each minute of the hour for each station
 // Special exception: no 440 Hz tone in first hour of UTC day; must be handled ad-hoc
 int const WWV_tone_schedule[60] = {
-    0,600,440,  0,  0,600,500,  0,  0,  0, // 3 is nist reserved at wwvh, 4 reserved at wwv; 8-10 storms; 7 undoc wwv
-    0,  0,500,600,500,600,  0,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
+    0,600,440,  0,  0,600,500,600,  0,  0, // 3 is nist reserved at wwvh, 4 reserved at wwv; 8-10 storms; 7 undoc wwv
+    0,600,500,600,500,600,  0,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
   500,600,500,600,500,600,500,600,500,  0, // 29 is silent to protect wwvh id
     0,600,500,600,500,600,500,600,500,600, // 30 is station ID
   500,600,500,  0,  0,  0,  0,  0,  0,  0, // 43-51 is silent period to protect wwvh
@@ -265,10 +265,44 @@ int decode(unsigned char *code){
   return r;
 }
 
-// Construct time code as array of **61** unsigned chars with values 0 or 1
-void maketimecode(unsigned char *code,int dut1,int leap_pending,int year,int month,int day,int hour,int minute){
-    memset(code,0,61*sizeof(*code)); // All bits default to 0
+/* Determine day of year when daylight savings time starts
+   Only US rules are needed, since WWV/WWVH are American stations
+   US rules last changed in 2007 to 2nd sunday of March to first sunday in November
+   Always lasts for 238 days (34 weeks)
+   Pattern repeats every 28 years (7 days in week x 4 years in leap year cycle)
+   Hopefully DST will be abolished before long!
+                                          2007: 3/11 (70)    2008: 3/9  (69)
+   2009: 3/8  (67)     2010: 3/14 (73)    2011: 3/13 (72)    2012: 3/11 (71)
+   2013: 3/10 (69)     2014: 3/9  (68)    2015: 3/8  (67)    2016: 3/13 (73)
+   2017: 3/12 (71)     2018: 3/11 (70)    2019: 3/10 (69)    2020: 3/8  (68)
+   2021: 3/14 (73)     2022: 3/13 (72)    2023: 3/12 (71)    2024: 3/10 (70)
+   2025: 3/9  (68)     2026: 3/8  (67)    2027: 3/14 (73)    2028: 3/12 (72)
+   2029: 3/11 (70)     2030: 3/10 (69)    2031: 3/9  (68)    2032: 3/14 (74)
 
+   2033: 3/13 (72)     2034: 3/12 (71)    2035: 3/11 (70)    2036: 3/9  (69)
+   2037: 3/8  (67)     2038: 3/14 (73)    2039: 3/13 (72)    2040: 3/11 (71)
+   2041: 3/10 (69)     2042: 3/9  (68)    2043: 3/8  (67)    2044: 3/13 (73)
+   2045: 3/12 (71)     2046: 3/11 (70)    2047: 3/10 (69)    2048: 3/8  (68)
+   2049: 3/14 (73)     2050: 3/13 (72)    2051: 3/12 (71)    2052: 3/10 (70)
+   2053: 3/9  (68)     2054: 3/8  (67)    2055: 3/14 (73)    2056: 3/12 (72)
+   2057: 3/11 (70)     2058: 3/10 (69)    2059: 3/9  (68)    2060: 3/14 (74)
+*/
+int dst_start_doy(int year){
+  int r = -1;
+  if(year >= 2007){
+    r = 72;  // DST would have started on day 72 in year 2005 if rule had been in effect then
+    for(int ytmp = 2005; ytmp < year; ytmp++){
+      r -= 1 + is_leap_year(ytmp);
+      if(r < 67) // Never before day 67
+	r += 7;
+    }
+    if(r == 67 && is_leap_year(year)) // day 67 is 1st sunday in march
+	r += 7;
+  }
+  return r;
+}
+
+int day_of_year(int year,int month,int day){
     // Compute day of year
     // don't use doy in tm struct in case date was manually overridden
     // (Bug found and reported by Jayson Smith jaybird@bluegrasspals.com)
@@ -279,36 +313,29 @@ void maketimecode(unsigned char *code,int dut1,int leap_pending,int year,int mon
       else
 	doy += Days_in_month[i];
     }
+    return doy;
+}
 
-    // Only US rules are needed, since WWV/WWVH are American stations
-    // US rules last changed in 2007 to 2nd sunday of March to first sunday in November
-    // Always lasts for 238 days
-    // 2007: 3/11      2008: 3/9      2009: 3/8      2010: 3/14      2011: 3/13      2012: 3/11
-    // 2013: 3/10      2014: 3/9      2015: 3/8      2016: 3/13      2017: 3/12      2018: 3/11
-    // 2019: 3/10      2020: 3/8
-    
-    int dst_start_doy = 0;
-    if(year >= 2007){
-      int ytmp = 2007;
-      int dst_start_dom = 11;
-      for(;ytmp<= year;ytmp++){
-	dst_start_dom--; // One day earlier each year
-	if(is_leap_year(ytmp))
-	  dst_start_dom--; // And an extra day earlier after a leap year february
-	if(dst_start_dom <= 7) // No longer second sunday, slip a week
-	  dst_start_dom += 7;
-      }
-      dst_start_doy = 59 + dst_start_dom;
-      if(is_leap_year(year))
-	dst_start_doy++;
-    }
-    if(dst_start_doy != 0){
+
+// Construct time code as array of **61** unsigned chars with values 0 or 1
+void maketimecode(unsigned char *code,int dut1,int leap_pending,int year,int month,int day,int hour,int minute){
+    memset(code,0,61*sizeof(*code)); // All bits default to 0
+
+    int doy = day_of_year(year,month,day);
+    int dst_start = dst_start_doy(year);
+
+    if(dst_start >= 1){
       // DST always lasts for 238 days
-      if(doy > dst_start_doy && doy <= dst_start_doy + 238)
+      if(doy > dst_start && doy <= dst_start + 238)
 	code[2] = 1; // DST status at 00:00 UTC
-      if(doy >= dst_start_doy && doy < dst_start_doy + 238)
+      if(doy >= dst_start && doy < dst_start + 238)
 	code[55] = 1; // DST status at 24:00 UTC
+#if 0
+      fprintf(stderr,"year %d month %d day %d doy %d dst_start_doy %d dst_start_doy + 238 %d\n",
+	      year, month, day, doy, dst_start, dst_start + 238);
+#endif
     }
+
     code[3] = leap_pending;
     
     // Year
@@ -534,6 +561,7 @@ int main(int argc,char *argv[]){
   int dut1 = 0;
   int manual_time = 0;
   double fsec;
+  int devnum = -1;
 
   // Use current computer clock time as default
   struct timeval startup_tv;
@@ -548,9 +576,18 @@ int main(int argc,char *argv[]){
   year = tm->tm_year + 1900;
   setlocale(LC_ALL,getenv("LANG"));
 
+#if 0
+  for(int y=2007;y < 2100;y++){
+    fprintf(stderr,"year %d dst start %d\n",y,dst_start_doy(y));
+  }
+#endif
+
   // Read and process command line arguments
-  while((c = getopt(argc,argv,"HY:M:D:h:m:s:u:r:LNv")) != EOF){
+  while((c = getopt(argc,argv,"HY:M:D:h:m:s:u:r:LNvn:")) != EOF){
     switch(c){
+    case 'n':
+      devnum = strtol(optarg,NULL,0);
+      break;
     case 'v':
       Verbose++;
       break;
@@ -616,8 +653,24 @@ int main(int argc,char *argv[]){
 #ifdef DIRECT
     // No output redirection, so use portaudio to write directly to audio hardware with "precise" (?) timing
     Direct_mode = 1;
+
     Pa_Initialize();
-    Pa_OpenDefaultStream(&Stream,0,1,paInt16,(double)Samprate,48000,pa_callback,NULL); // one whole second?
+    PaDeviceIndex dev = Pa_GetDefaultOutputDevice();
+    if(devnum != -1)
+      dev = devnum;
+    
+    PaStreamParameters param;
+    param.device = dev;
+    param.channelCount = 1;
+    param.sampleFormat = paInt16;
+    param.suggestedLatency = .01;
+    param.hostApiSpecificStreamInfo = NULL;
+
+
+
+
+    //    Pa_OpenDefaultStream(&Stream,0,1,paInt16,(double)Samprate,48000,pa_callback,NULL); // one whole second?
+    Pa_OpenStream(&Stream,NULL,&param,(double)Samprate,48000,0,pa_callback,NULL);
     // How about execution latency between gettimeofday() call and here?
     Buffer_start_time = Pa_GetStreamTime(Stream) - (fsec + sec + ((minute & 1) ? 60 : 0));
     Pa_StartStream(Stream);
