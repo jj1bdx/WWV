@@ -16,10 +16,9 @@
 //     no GPS status
 //     will probably require changes when oceanic weather goes away at end of Oct 2018
 
-#define DIRECT 1 // Enable direct on-time output to sound device with portaudio when stdout is a terminal
+//#define DIRECT 1 // Enable direct on-time output to sound device with portaudio when stdout is a terminal
 
-#define _GNU_SOURCE
-#include <assert.h>
+//#include <assert.h>
 #include <stdio.h>
 #include <math.h>
 #include <complex.h>
@@ -30,16 +29,22 @@
 #include <math.h>
 #include <memory.h>
 #include <sys/time.h>
-#include <locale.h>
-#include <sys/stat.h>
+//#include <locale.h>
+//#include <sys/stat.h>
 
 #ifdef DIRECT
 #include <portaudio.h>
 #endif
 
-char Libdir[] = "/usr/local/share/ka9q-radio";
+#include "voice.h"
+#include "audio/id.h"
+#include "audio/mars_ann.h"
+#include "audio/wwvh_phone.h"
+#include "audio/geophys_ann.h"
 
-int Samprate = 48000; // Samples per second - try to use this if possible
+//char Libdir[] = "/usr/local/share/ka9q-radio";
+
+const int Samprate = 16000; // Samples per second - try to use this if possible
 int Samprate_ms;      // Samples per millisecond - sampling rates not divisible by 1000 may break
 int Direct_mode;      // Writing directly to audio device
 int WWVH = 0; // WWV by default
@@ -67,16 +72,16 @@ int const Days_in_month[] = { // Index 1 = January, 12 = December
 // Tone schedules for each minute of the hour for each station
 // Special exception: no 440 Hz tone in first hour of UTC day; must be handled ad-hoc
 int const WWV_tone_schedule[60] = {
-    0,600,440,  0,  0,600,500,600,  0,  0, // 3 is nist reserved at wwvh, 4 reserved at wwv; 8-10 storms; 7 undoc wwv
-    0,600,500,600,500,600,  0,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
+    0,600,440,  0,  0,600,500,600,500,600, // 3 is nist reserved at wwvh, 4 reserved at wwv; 8-10 storms; 7 undoc wwv
+    0,600,500,600,500,600,500,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
   500,600,500,600,500,600,500,600,500,  0, // 29 is silent to protect wwvh id
     0,600,500,600,500,600,500,600,500,600, // 30 is station ID
   500,600,500,  0,  0,  0,  0,  0,  0,  0, // 43-51 is silent period to protect wwvh
-    0,  0,500,600,500,600,500,600,500,  0  // 59 is silent to protect wwvh id; 52 new special at wwvh, not protected by wwv
+    0,  0,  0,600,500,600,500,600,500,  0  // 59 is silent to protect wwvh id; 52 new special at wwvh, not protected by wwv
 };
 
 int const WWVH_tone_schedule[60] = {
-    0,440,600,  0,  0,500,600,  0,  0,  0, // 0 silent to protect wwv id; 3 nist reserved; 4 reserved at wwv; 7 protects undoc wwv; 8-10 protects storms at wwv
+    0,440,600,  0,  0,500,600,500,  0,  0, // 0 silent to protect wwv id; 3 nist reserved; 4 reserved at wwv; 7 protects undoc wwv; 8-10 protects storms at wwv
     0,  0,600,500,  0,  0,  0,  0,  0,  0, // 14-19 is silent period to protect wwv; 11 silent to protect undoc wwv
   600,500,600,500,600,500,600,500,600,  0, // 29 is station ID
     0,500,600,500,600,500,600,500,600,500, // 30 silent to protect wwv id
@@ -91,6 +96,7 @@ complex double const csincos(double x){
   return cos(x) + I*sin(x);
 }
 
+#if 0
 // Insert PCM audio file into audio output at specified offset
 int announce_audio_file(int16_t *output, char *file, int startms){
   if(startms < 0 || startms >= 61000)
@@ -185,7 +191,73 @@ int announce_text(int16_t *output,char const *message,int startms,int female){
   unlink(tempfile_txt);
   return r;
 }
+#endif
 
+// Time announcement
+int announce_time(int16_t *audio, int startms, int stopms, int next_hour, int next_minute, int female) {
+  if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+    return -1;
+
+  build_time_announcement(next_hour, next_minute, female,
+        (stopms - startms)*Samprate_ms, audio + startms*Samprate_ms);
+
+  return 0;
+}
+
+// Station ID
+int announce_station(int16_t *audio, int startms, int stopms, int wwvh) {
+  if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+    return -1;
+
+  int max_len = (stopms - startms)*Samprate_ms;
+  int samples = id_sizes[wwvh];
+  if (samples > max_len) samples = max_len;
+  short *id = wwvh ? wwvh_id : wwv_id;
+
+  memcpy(audio + startms*Samprate_ms, id, samples*sizeof(*audio));
+  return 0;
+}
+
+// DoD M.A.R.S. (no actual messages)
+int announce_mars(int16_t *audio, int startms, int stopms, int wwvh) {
+  if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+    return -1;
+
+  int max_len = (stopms - startms)*Samprate_ms;
+  int samples = mars_ann_sizes[wwvh];
+  if (samples > max_len) samples = max_len;
+  short *mars_ann = wwvh ? wwvh_mars_ann : wwv_mars_ann;
+
+  memcpy(audio + startms*Samprate_ms, mars_ann, samples*sizeof(*audio));
+  return 0;
+}
+
+// WWVH only: announce WWVH broadcast availability over the phone
+int announce_phone(int16_t *audio, int startms, int stopms) {
+  if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+    return -1;
+
+  int max_len = (stopms - startms)*Samprate_ms;
+  int samples = wwvh_phone_size;
+  if (samples > max_len) samples = max_len;
+
+  memcpy(audio + startms*Samprate_ms, wwvh_phone, samples*sizeof(*audio));
+  return 0;
+}
+
+// Geophysical report: WWV/H
+int announce_geophys(int16_t *audio, int startms, int stopms, int wwvh) {
+  if(startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+    return -1;
+
+  int max_len = (stopms - startms)*Samprate_ms;
+  int samples = geophys_ann_sizes[wwvh];
+  if (samples > max_len) samples = max_len;
+  short *geophys_ann = wwvh ? wwvh_geophys_ann : wwv_geophys_ann;
+
+  memcpy(audio + startms*Samprate_ms, geophys_ann, samples*sizeof(*audio));
+  return 0;
+}
 
 // Overlay a tone with frequency 'freq' in audio buffer, overwriting whatever was there
 // starting at 'startms' within the minute and stopping one sample before 'stopms'. 
@@ -196,7 +268,7 @@ int overlay_tone(int16_t *output,int startms,int stopms,float freq,float amp){
   if(startms < 0 || stopms <= startms || stopms > 61000)
     return -1;
 
-  assert((startms * (int)freq % 1000) == 0); // All tones start with a positive zero crossing?
+  //assert((startms * (int)freq % 1000) == 0); // All tones start with a positive zero crossing?
 
   complex double phase = 1;
   complex double const phase_step = csincos(2*M_PI*freq/Samprate);
@@ -216,7 +288,7 @@ int add_tone(int16_t *output,int startms,int stopms,float freq,float amp){
   if(startms < 0 || stopms <= startms || stopms > 61000)
     return -1;
 
-  assert((startms * (int)freq % 1000) == 0); // All tones start with a positive zero crossing?
+  //assert((startms * (int)freq % 1000) == 0); // All tones start with a positive zero crossing?
 
   complex double phase = 1;
   complex double const phase_step = csincos(2*M_PI*freq/Samprate);
@@ -259,7 +331,7 @@ int decode(unsigned char *code){
 
   for(int i=3; i>=0; i--){
     r <<= 1;
-    assert(code[i] == 0 || code[i] == 1);
+    //assert(code[i] == 0 || code[i] == 1);
     r += code[i];
   }
   return r;
@@ -404,6 +476,7 @@ void decode_timecode(unsigned char *code,int length){
 void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minute){
   const double tone_amp = pow(10.,-6.0/20.); // -6 dB
 
+#if 0
   // A raw audio file pre-empts everything else
   char *rawfilename = NULL;
   char *textfilename = NULL;
@@ -427,12 +500,51 @@ void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minute){
     if(tone)
       add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
   }
+#else
+  // Continuous tone (or silence) from start of second 1 through end of second 44
+    unsigned int tone;
+    if(wwvh)
+      tone = WWVH_tone_schedule[minute];
+    else
+      tone = WWV_tone_schedule[minute];
 
+    // Special case: no 440 Hz tone during hour 0
+    if(tone == 440 && hour == 0)
+      tone = 0;
+
+    if(tone){
+      add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
+    } else if(wwvh && (minute == 59 || minute == 29)){
+      // WWVH IDs at minute 29 and 59 in female voice
+      announce_station(output,1000,45000,1);
+    } else if(!wwvh && (minute == 0 || minute == 30)){
+      // WWV IDs at minute 0 and 30 in male voice
+      announce_station(output,1000,45000,0);
+    } else if(!wwvh && (minute == 4 || minute == 10)) {
+      // DoD M.A.R.S. announcement on minute 10
+      announce_mars(output,1000, 45000, 0);
+    } else if(wwvh && (minute == 3 || minute == 50)) {
+      // ...and on minute 50
+      announce_mars(output,1000, 45000, 1);
+    } else if(wwvh && (minute == 47 || minute == 52)) {
+      // dial-in information broadcast on WWVH only
+      announce_phone(output,1000, 45000);
+    } else if(!wwvh && minute == 18) {
+      // geophysical alerts on minute 18
+      announce_geophys(output,1000, 45000, 0);
+    } else if(wwvh && minute == 45) {
+      // ... and on minute 45
+      announce_geophys(output,1000, 45000, 1);
+    }
+#endif
+
+#if 0
  done:;
   if(rawfilename)
     free(rawfilename);
   if(textfilename)
     free(textfilename);
+#endif
 }
 
 
@@ -462,6 +574,7 @@ void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1
     if(++nexthour == 24)
       nexthour = 0;
   }
+#if 0
   char *message = NULL;
   int asr = -1;
   asr = asprintf(&message,"At the tone, %d %s %d %s Coordinated Universal Time",
@@ -474,6 +587,13 @@ void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1
       announce_text(output,message,45000,1); // WWVH: female voice at 45 seconds
     free(message); message = NULL;
   }
+#else
+  if(!wwvh)
+    announce_time(output, 52500, 60000, nexthour, nextminute, 0); // WWV: male voice at 52.5 seconds
+  else
+    announce_time(output, 45000, 52500, nexthour, nextminute, 1); // WWVH: female voice at 45 seconds
+#endif
+
 
   // Modulate time code onto 100 Hz subcarrier
   int s;
@@ -512,7 +632,7 @@ void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1
 
 
 // Address of malloc'ed audio output buffer, 2 minutes + 1 second long (in case of leap second)
-int16_t *Audio_buffer;
+int16_t Audio_buffer[16000*2*61];
 
 #ifdef DIRECT
 
@@ -574,7 +694,7 @@ int main(int argc,char *argv[]){
   day = tm->tm_mday;
   month = tm->tm_mon + 1;
   year = tm->tm_year + 1900;
-  setlocale(LC_ALL,getenv("LANG"));
+  //setlocale(LC_ALL,getenv("LANG"));
 
 #if 0
   for(int y=2007;y < 2100;y++){
@@ -592,7 +712,8 @@ int main(int argc,char *argv[]){
       Verbose++;
       break;
     case 'r':
-      Samprate = strtol(optarg,NULL,0); // Try not to change this, may not work
+      fprintf(stderr, "Sample rare cannot be changed\n");
+      //Samprate = strtol(optarg,NULL,0); // Try not to change this, may not work
       break;
     case 'H': // Simulate WWVH, otherwise WWV
       WWVH++;
@@ -633,7 +754,7 @@ int main(int argc,char *argv[]){
       break;
     case '?':
       fprintf(stderr,"Usage: %s [-v] [-r samprate] [-H] [-u ut1offset] [-Y year] [-M month] [-D day] [-h hour] [-m min] [-s sec] [-L|-N]\n",argv[0]);
-      fprintf(stderr,"Default sample rate: 48 kHz\n");
+      fprintf(stderr,"Default sample rate: 16 kHz\n");
       fprintf(stderr,"By default uses current system time; Use -Y/-M/-D/-h/-m/-s to override for testing, e.g., of leap seconds\n");
       fprintf(stderr,"-v turns on verbose reporting. -H selects the WWVH format; default is WWV\n");
       fprintf(stderr,"-u specifies current UT1-UTC offset in tenths of a second, must be between -7 and +7\n");
@@ -646,8 +767,8 @@ int main(int argc,char *argv[]){
   }
   // Allocate an audio buffer >= 2 minutes + 1 second long
   // Even minutes will use first half, odd minutes second half
-  Audio_buffer = malloc(2*Samprate*61*sizeof(int16_t));
-  memset(Audio_buffer,0,2*Samprate*61*sizeof(int16_t));
+  //Audio_buffer = malloc(2*Samprate*61*sizeof(int16_t));
+  //memset(Audio_buffer,0,2*Samprate*61*sizeof(int16_t));
 
   if(isatty(fileno(stdout))){
 #ifdef DIRECT
@@ -742,7 +863,7 @@ int main(int argc,char *argv[]){
 	  tv.tv_usec - startup_tv.tv_usec;
 	
 	if(Verbose)
-	  fprintf(stderr,"startup delay %'d usec\n",startup_delay);
+	  fprintf(stderr,"startup delay %d usec\n",startup_delay);
 	samplenum = (Samprate_ms * startup_delay) / 1000;
 	manual_time = 1; // do this only first time
       }
