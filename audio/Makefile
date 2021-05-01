@@ -7,4 +7,4 @@ audio.a: $(AUDIO)
 	ar rc audio.a $(AUDIO)
 
 clean:
-	rm -f audio.a
+	rm -f audio.a *.o
