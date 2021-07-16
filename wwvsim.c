@@ -53,6 +53,36 @@ int Verbose = 0;
 int Negative_leap_second_pending = 0; // If 1, leap second will be removed at end of June or December, whichever is first
 int Positive_leap_second_pending = 0; // If 1, leap second will be inserted at end of June or December, whichever is first
 
+// super primitive WAVE header
+const char wav_header[] = {
+	// RIFF header
+	'R', 'I', 'F', 'F',
+	0, 0, 0, 0,
+	'W', 'A', 'V', 'E',
+
+	// format
+	'f', 'm', 't', ' ',
+	16, 0, 0, 0, // chunk size
+	1, 0, // audio format
+	1, 0, // number of channels
+
+	// sample rate
+	 Samprate & 0x00ff,
+	(Samprate & 0xff00) >> 8,
+	0, 0,
+	// bytes per second
+	 Samprate*1*sizeof(short) & 0x00ff,
+	(Samprate*1*sizeof(short) & 0xff00) >> 8,
+	0, 0,
+
+	1*sizeof(short), 0, // sample alignment
+	8*sizeof(short), 0, // bits per sample
+
+	// data
+	'd', 'a', 't', 'a',
+	0, 0, 0, 0
+};
+
 // Is specified year a leap year?
 int const is_leap_year(int y){
   if((y % 4) != 0)
@@ -801,6 +831,9 @@ int main(int argc,char *argv[]){
 #endif    
 
   }
+
+  // output WAVE header
+  fwrite(wav_header, sizeof(int16_t), sizeof(wav_header), stdout);
 
   if(year < 2007)
     fprintf(stderr,"Warning: DST rules prior to %d not implemented; DST bits = 0\n",year);    // Punt
