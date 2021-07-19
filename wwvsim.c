@@ -54,7 +54,7 @@ int Negative_leap_second_pending = 0; // If 1, leap second will be removed at en
 int Positive_leap_second_pending = 0; // If 1, leap second will be inserted at end of June or December, whichever is first
 
 // super primitive WAVE header
-const char wav_header[] = {
+const unsigned char wav_header[] = {
 	// RIFF header
 	'R', 'I', 'F', 'F',
 	0, 0, 0, 0,
@@ -80,7 +80,7 @@ const char wav_header[] = {
 
 	// data
 	'd', 'a', 't', 'a',
-	0, 0, 0, 0
+	255, 255, 255, 255
 };
 
 // Is specified year a leap year?
