@@ -44,7 +44,7 @@
 
 //char Libdir[] = "/usr/local/share/ka9q-radio";
 
-const int Samprate = 16000; // Samples per second - try to use this if possible
+int Samprate = 16000; // Samples per second - try to use this if possible
 int Samprate_ms;      // Samples per millisecond - sampling rates not divisible by 1000 may break
 int Direct_mode;      // Writing directly to audio device
 int WWVH = 0; // WWV by default
@@ -54,7 +54,7 @@ int Negative_leap_second_pending = 0; // If 1, leap second will be removed at en
 int Positive_leap_second_pending = 0; // If 1, leap second will be inserted at end of June or December, whichever is first
 
 // super primitive WAVE header
-const unsigned char wav_header[] = {
+unsigned char wav_header[] = {
 	// RIFF header
 	'R', 'I', 'F', 'F',
 	0, 0, 0, 0,
@@ -67,13 +67,9 @@ const unsigned char wav_header[] = {
 	1, 0, // number of channels
 
 	// sample rate
-	 Samprate & 0x00ff,
-	(Samprate & 0xff00) >> 8,
-	0, 0,
+	0, 0, 0, 0,
 	// bytes per second
-	 Samprate*1*sizeof(short) & 0x00ff,
-	(Samprate*1*sizeof(short) & 0xff00) >> 8,
-	0, 0,
+	0, 0, 0, 0,
 
 	1*sizeof(short), 0, // sample alignment
 	8*sizeof(short), 0, // bits per sample
@@ -742,7 +738,7 @@ int main(int argc,char *argv[]){
       Verbose++;
       break;
     case 'r':
-      fprintf(stderr, "Sample rare cannot be changed\n");
+      fprintf(stderr, "Sample rate cannot be changed\n");
       //Samprate = strtol(optarg,NULL,0); // Try not to change this, may not work
       break;
     case 'H': // Simulate WWVH, otherwise WWV
@@ -784,7 +780,7 @@ int main(int argc,char *argv[]){
       break;
     case '?':
       fprintf(stderr,"Usage: %s [-v] [-r samprate] [-H] [-u ut1offset] [-Y year] [-M month] [-D day] [-h hour] [-m min] [-s sec] [-L|-N]\n",argv[0]);
-      fprintf(stderr,"Default sample rate: 16 kHz\n");
+      fprintf(stderr,"Default sample rate: %d kHz\n", Samprate/1000);
       fprintf(stderr,"By default uses current system time; Use -Y/-M/-D/-h/-m/-s to override for testing, e.g., of leap seconds\n");
       fprintf(stderr,"-v turns on verbose reporting. -H selects the WWVH format; default is WWV\n");
       fprintf(stderr,"-u specifies current UT1-UTC offset in tenths of a second, must be between -7 and +7\n");
@@ -831,6 +827,10 @@ int main(int argc,char *argv[]){
 #endif    
 
   }
+
+  memcpy(wav_header + 24, &Samprate, sizeof(int32_t));
+  int byte_rate = Samprate*1*sizeof(short);
+  memcpy(wav_header + 28, &byte_rate, sizeof(int32_t));
 
   // output WAVE header
   fwrite(wav_header, sizeof(int16_t), sizeof(wav_header), stdout);
