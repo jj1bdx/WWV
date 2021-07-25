@@ -1,21 +1,27 @@
 CC = gcc
 CFLAGS = -O2 -Wall -pedantic -lsndfile -s
 
-all: ann id mars nums phone
+all: helpers
 
-ann:
-	$(CC) -o ann ann.c $(CFLAGS)
-id:
-	$(CC) -o id id.c $(CFLAGS)
-mars:
-	$(CC) -o mars mars.c $(CFLAGS)
-nums:
-	$(CC) -o nums nums.c $(CFLAGS)
-phone:
-	$(CC) -o phone phone.c $(CFLAGS)
+helpers: ann id mars nums phone
 
-audio-data:
+audio-src:
 	./create-audio-data.sh
+
+ann: ann.c
+	$(CC) -o ann $< $(CFLAGS)
+
+id: id.c
+	$(CC) -o id $< $(CFLAGS)
+
+mars: mars.c
+	$(CC) -o mars $< $(CFLAGS)
+
+nums: nums.c
+	$(CC) -o nums $< $(CFLAGS)
+
+phone: phone.c
+	$(CC) -o phone $< $(CFLAGS)
 
 clean:
 	rm -f ann id mars nums phone

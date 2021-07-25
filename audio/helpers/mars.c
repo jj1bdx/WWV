@@ -22,10 +22,10 @@ int main(int argc, char *argv[]) {
 	// lengths
 	int sizes[2];
 
-	short audio[16000*60];
+	short audio[16000*60] = {0};
 	char file[32];
 
-	char *stations[] = {"wwv" , "wwvh"};
+	char *stations[] = {"wwv", "wwvh"};
 
 	SNDFILE *inf;
 	SF_INFO sfinfo;
@@ -62,12 +62,12 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "extern short %s_mars_ann[%d];\n", stations[k], frames);
 	}
 
-	printf("int mars_ann_sizes[2] = {");
+	printf("int mars_ann_sizes[2] = {\n");
 	for (int i = 0; i < 2; i++) {
 		if (i == 2 - 1) {
-			printf("%6d", sizes[i]);
+			printf("%6d\n", sizes[i]);
 		} else {
-			printf("%d, ", sizes[i]);
+			printf("%6d,", sizes[i]);
 		}
 	}
 	printf("};\n");

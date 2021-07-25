@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
 
 		newline = 0;
 
-		printf("short %s_id[%d] = {\n\t", stations[i], frames);
+		printf("short %s_id[%d] = {\n", stations[i], frames);
 		for (int j = 0; j < frames; j++) {
 			if (j == frames - 1) {
 				printf("%6d\n", audio[j]);
@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
 				printf("%6d,", audio[j]);
 			}
 			if (++newline == 10) {
-				printf("\n\t");
+				printf("\n");
 				newline = 0;
 			}
 		}
@@ -65,12 +65,12 @@ int main(int argc, char *argv[]) {
 		printf("\n");
 	}
 
-	printf("int id_sizes[%d] = {", 2);
+	printf("int id_sizes[%d] = {\n", 2);
 	for (int i = 0; i < 2; i++) {
 		if (i == 2 - 1) {
-			printf("%d", sizes[i]);
+			printf("%6d\n", sizes[i]);
 		} else {
-			printf("%d, ", sizes[i]);
+			printf("%6d,", sizes[i]);
 		}
 	}
 	printf("};\n");

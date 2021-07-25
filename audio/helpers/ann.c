@@ -70,12 +70,12 @@ int main(int argc, char *argv[]) {
 
 		fprintf(stderr, "extern short %s_time_ann[%d];\n", stations[i], total_frames);
 
-		printf("int %s_time_ann_sizes[%d] = {", stations[i], 4);
+		printf("int %s_time_ann_sizes[%d] = {\n", stations[i], 4);
 		for (int j = 0; j < 4; j++) {
 			if (j == 4 - 1) {
-				printf("%d", sizes[j]);
+				printf("%6d\n", sizes[j]);
 			} else {
-				printf("%d, ", sizes[j]);
+				printf("%6d,", sizes[j]);
 			}
 		}
 		printf("};\n");

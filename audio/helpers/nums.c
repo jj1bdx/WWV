@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
 	short audio[16000*60*2] = {0};
 	char file[32];
 
-	char *stations[] = {"wwv" , "wwvh"};
+	char *stations[] = {"wwv", "wwvh"};
 
 	SNDFILE *inf;
 	SF_INFO sfinfo;
@@ -36,6 +36,8 @@ int main(int argc, char *argv[]) {
 
 	int newline;
 
+	const int default_num_size = 10;
+
 	for (int i = 0; i < 2; i++) {
 		total_frames = 0; // accumulated number of frames for each station
 
@@ -44,8 +46,8 @@ int main(int argc, char *argv[]) {
 			snprintf(file, 32, "../assets/%s/%d.wav", stations[i], j);
 			if (!(inf = sf_open(file, SFM_READ, &sfinfo))) {
 				not_found[j] = 1;
-				frames = 10;
-				sizes[j] = 10;
+				frames = default_num_size;
+				sizes[j] = default_num_size;
 			} else {
 				frames = sfinfo.frames;
 				sizes[j] = frames;
@@ -74,22 +76,28 @@ int main(int argc, char *argv[]) {
 		}
 		printf("};\n");
 
+		newline = 0;
+
 		fprintf(stderr, "extern short %s_nums[%d];\n", stations[i], total_frames);
 
-		printf("int %s_nums_sizes[%d] = {", stations[i], 61);
+		printf("int %s_nums_sizes[%d] = {\n", stations[i], 61);
 		for (int j = 0; j < 61; j++) {
 			if (not_found[j]) {
 				if (j == 61 - 1) {
-					printf("0 /* no audio for %d */", j);
+					printf("%6d /* no audio for %d */\n", default_num_size, j);
 				} else {
-					printf("0 /* no audio for %d */, ", j);
+					printf("%6d /* no audio for %d */,", default_num_size, j);
 				}
 			} else {
 				if (j == 61 - 1) {
-					printf("%d", sizes[j]);
+					printf("%6d\n", sizes[j]);
 				} else {
-					printf("%d, ", sizes[j]);
+					printf("%6d,", sizes[j]);
 				}
+			}
+			if (++newline == 10) {
+				printf("\n");
+				newline = 0;
 			}
 		}
 		printf("};\n");

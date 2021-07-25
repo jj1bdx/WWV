@@ -1,21 +1,11 @@
-CFLAGS = -O2 -Wall -pedantic
 CC = gcc
+CFLAGS = -O2 -Wall -pedantic
 
-COMMON_SRC = voice.o audio/audio.a
+all: audio wwvsim
 
-all: wwvsim
-
-audio/audio.a:
+wwvsim: wwvsim.o voice.o audio/*.c
 	$(MAKE) -C audio
-
-wwvsim: $(COMMON_SRC) wwvsim.o
-	$(CC) -o $@ wwvsim.o $(COMMON_SRC) -lm -s
-
-helpers:
-	$(MAKE) -C audio/helpers
-
-audio-data:
-	$(MAKE) -C audio/helpers audio-data
+	$(CC) -o $@ wwvsim.o voice.o audio/audio.a -lm -s
 
 clean:
 	$(MAKE) -C audio clean
