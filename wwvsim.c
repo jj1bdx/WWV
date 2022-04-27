@@ -528,40 +528,40 @@ void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minute){
   }
 #else
   // Continuous tone (or silence) from start of second 1 through end of second 44
-    unsigned int tone;
-    if(wwvh)
-      tone = WWVH_tone_schedule[minute];
-    else
-      tone = WWV_tone_schedule[minute];
+  int tone = wwvh ? WWVH_tone_schedule[minute] : WWV_tone_schedule[minute];
 
-    // Special case: no 440 Hz tone during hour 0
-    if(tone == 440 && hour == 0)
-      tone = 0;
+  // Special case: no 440 Hz tone during hour 0
+  if(tone == 440 && hour == 0)
+    tone = 0;
 
-    if(tone){
-      add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
-    } else if(wwvh && (minute == 59 || minute == 29)){
-      // WWVH IDs at minute 29 and 59 in female voice
-      announce_station(output,1000,45000,1);
-    } else if(!wwvh && (minute == 0 || minute == 30)){
-      // WWV IDs at minute 0 and 30 in male voice
-      announce_station(output,1000,45000,0);
-    } else if(!wwvh && (minute == 4 || minute == 10)) {
-      // DoD M.A.R.S. announcement on minute 10
-      announce_mars(output,1000, 45000, 0);
-    } else if(wwvh && (minute == 3 || minute == 50)) {
-      // ...and on minute 50
-      announce_mars(output,1000, 45000, 1);
-    } else if(wwvh && (minute == 47 || minute == 52)) {
-      // dial-in information broadcast on WWVH only
-      announce_phone(output,1000, 45000);
-    } else if(!wwvh && minute == 18) {
-      // geophysical alerts on minute 18
-      announce_geophys(output,1000, 45000, 0);
-    } else if(wwvh && minute == 45) {
-      // ... and on minute 45
-      announce_geophys(output,1000, 45000, 1);
-    }
+  if(tone)
+    add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
+
+  // WWVH IDs at minute 29 and 59 in female voice
+  if(wwvh && (minute == 59 || minute == 29)){
+    announce_station(output,1000,45000,1);
+  // WWV IDs at minute 0 and 30 in male voice
+  } else if(!wwvh && (minute == 0 || minute == 30)){
+    announce_station(output,1000,45000,0);
+
+  // DoD M.A.R.S. announcement on minute 10
+  } else if(!wwvh && (minute == 4 || minute == 10)) {
+    announce_mars(output,1000, 45000, 0);
+  // ...and on minute 50
+  } else if(wwvh && (minute == 3 || minute == 50)) {
+    announce_mars(output,1000,45000,1);
+
+  // dial-in information broadcast on WWVH only
+  } else if(wwvh && (minute == 47 || minute == 52)) {
+    announce_phone(output,1000, 45000);
+
+  // geophysical alerts on minute 18
+  } else if(!wwvh && minute == 18) {
+    announce_geophys(output,1000,45000,0);
+  // ... and on minute 45
+  } else if(wwvh && minute == 45) {
+    announce_geophys(output,1000,45000,1);
+  }
 #endif
 
 #if 0

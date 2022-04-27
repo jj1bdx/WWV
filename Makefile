@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -O2 -Wall -pedantic
 
-all: audio wwvsim
+all: wwvsim
 
 wwvsim: wwvsim.o voice.o audio/*.c
 	$(MAKE) -C audio
