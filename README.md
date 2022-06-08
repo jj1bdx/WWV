@@ -2,7 +2,8 @@
 
 # WWV
 
-WWV/WWVH emulator. Full format including 100 Hz timecode. Speech using bundled voice data.
+WWV/WWVH emulator. Full format including 100 Hz timecode. Speech using bundled voice data
+from [kalafut's WWV simulator](https://github.com/kalafut/wwv).
 
 This started as a quick hack but ended up fully functional. The program generates raw 16-bit linear PCM mono audio at a
 16 kHz sample rate on standard output. So to hear it, pipe it into your local audio player, e.g.,
