@@ -79,6 +79,33 @@ unsigned char wav_header[] = {
 	255, 255, 255, 255
 };
 
+/* needed to work around implicit declaration */
+extern int nanosleep(const struct timespec *req, struct timespec *rem);
+
+/* millisecond sleep */
+static void msleep(unsigned int ms) {
+	struct timespec ts;
+	ts.tv_sec = ms / 1000u;			/* whole seconds */
+	ts.tv_nsec = (ms % 1000u) * 1000000;	/* remainder, in nanoseconds */
+	nanosleep(&ts, NULL);
+}
+
+static void wait_for_start() {
+	struct tm *utc;
+	time_t now;
+
+	while (1) {
+		/* check time */
+		now = time(NULL);
+		utc = gmtime(&now);
+
+		if (utc->tm_sec == 0) break;
+
+		/* wait 1 ms before polling again */
+		msleep(1);
+	}
+}
+
 // Is specified year a leap year?
 int const is_leap_year(int y){
 	if((y % 4) != 0)
@@ -608,8 +635,8 @@ void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1
 	nexthour = hour;
 	if(++nextminute == 60){
 		nextminute = 0;
-	if(++nexthour == 24)
-		nexthour = 0;
+		if(++nexthour == 24)
+			nexthour = 0;
 	}
 #if 0
 	char *message = NULL;
@@ -639,7 +666,7 @@ void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1
 	for(s=1; s<length; s++){ // No subcarrier during second 0 (minute/hour beep)
 		if((s % 10) == 9){
 			add_tone(output,s*1000,s*1000+800,100,marker_high_amp);	 // 800 ms position markers on seconds 9, 19, 29, ...
-			add_tone(output,s*1000+800,s*1000+1000,100,marker_low_amp); 
+			add_tone(output,s*1000+800,s*1000+1000,100,marker_low_amp);
 		} else if(code[s]){
 			add_tone(output,s*1000,s*1000+500,100,marker_high_amp);	 // 500 ms = 1 bit
 			add_tone(output,s*1000+500,s*1000+1000,100,marker_low_amp);
@@ -720,20 +747,17 @@ int main(int argc,char *argv[]){
 	int year,month,day,hour,minute,sec;
 	int dut1 = 0;
 	int manual_time = 0;
+#ifdef DIRECT
 	double fsec;
 	int devnum = -1;
+#endif
 
 	// Use current computer clock time as default
-	struct timeval startup_tv;
-	gettimeofday(&startup_tv,NULL);
-	struct tm const * const tm = gmtime(&startup_tv.tv_sec);
-	fsec = .000001 * startup_tv.tv_usec;
-	sec = tm->tm_sec;
-	minute = tm->tm_min;
-	hour = tm->tm_hour;
-	day = tm->tm_mday;
-	month = tm->tm_mon + 1;
-	year = tm->tm_year + 1900;
+	time_t now;
+	struct tm *utc;
+#ifdef DIRECT
+	fsec = 0.0;
+#endif
 	//setlocale(LC_ALL,getenv("LANG"));
 
 #if 0
@@ -746,7 +770,9 @@ int main(int argc,char *argv[]){
 	while((c = getopt(argc,argv,"HY:M:D:h:m:s:u:r:LNvn:")) != EOF){
 		switch(c){
 			case 'n':
+#ifdef DIRECT
 				devnum = strtol(optarg,NULL,0);
+#endif
 				break;
 			case 'v':
 				Verbose++;
@@ -783,7 +809,9 @@ int main(int argc,char *argv[]){
 				break;
 			case 's': // Manual second setting
 				sec = strtol(optarg,NULL,0);
+#ifdef DIRECT
 				fsec = 0;
+#endif
 				manual_time++;
 				break;
 			case 'L':
@@ -837,15 +865,8 @@ int main(int argc,char *argv[]){
 
 	}
 
-	memcpy(wav_header + 24, &Samprate, sizeof(int32_t));
-	int byte_rate = Samprate*1*sizeof(short);
-	memcpy(wav_header + 28, &byte_rate, sizeof(int32_t));
-
-	// output WAVE header
-	fwrite(wav_header, sizeof(int16_t), sizeof(wav_header), stdout);
-
-	if(year < 2007)
-		fprintf(stderr,"Warning: DST rules prior to %d not implemented; DST bits = 0\n",year);    // Punt
+	//if(year < 2007)
+	//	fprintf(stderr,"Warning: DST rules prior to %d not implemented; DST bits = 0\n",year);    // Punt
 
 	if(Positive_leap_second_pending && Negative_leap_second_pending){
 		fprintf(stderr,"Positive and negative leap seconds can't both be pending! Both cancelled\n");
@@ -865,6 +886,24 @@ int main(int argc,char *argv[]){
 	}
 
 	Samprate_ms = Samprate/1000; // Samples per ms
+
+	memcpy(wav_header + 24, &Samprate, sizeof(int32_t));
+	int byte_rate = Samprate*1*sizeof(short);
+	memcpy(wav_header + 28, &byte_rate, sizeof(int32_t));
+
+	// output WAVE header
+	fwrite(wav_header, sizeof(int16_t), sizeof(wav_header), stdout);
+
+	wait_for_start();
+
+	now = time(NULL);
+	utc = gmtime(&now);
+	sec = utc->tm_sec;
+	minute = utc->tm_min;
+	hour = utc->tm_hour;
+	day = utc->tm_mday;
+	month = utc->tm_mon + 1;
+	year = utc->tm_year + 1900;
 
 	while(1){
 		// First buffer half for even minutes, latter half for odd minutes
@@ -897,25 +936,13 @@ int main(int argc,char *argv[]){
 #ifdef DIRECT
 		if(!Direct_mode){
 #endif
-			int samplenum = 0;
 			if(!manual_time){
-				// Find time interval since startup, trim that many samples from the beginning of the buffer so we are on time
-				struct timeval tv;
-				gettimeofday(&tv,NULL);
-				int startup_delay = 1000000*(tv.tv_sec - startup_tv.tv_sec) +
-				tv.tv_usec - startup_tv.tv_usec;
-
-				if(Verbose)
-					fprintf(stderr,"startup delay %d usec\n",startup_delay);
-
-				samplenum = (Samprate_ms * startup_delay) / 1000;
 				manual_time = 1; // do this only first time
 			}
 			// Write the constructed buffer, minus startup delay plus however many seconds
 			// have already elapsed since the minute. This happens only at startup;
 			// on all subsequent minutes the entire buffer will be written
-			fwrite(audio+samplenum+sec*Samprate,sizeof(*audio),
-				Samprate * (length-sec) - samplenum,stdout);
+			fwrite(audio, sizeof(*audio), Samprate * length,stdout);
 
 #ifdef DIRECT
 		} else {
