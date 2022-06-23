@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <sndfile.h>
 
-int main(int argc, char *argv[]) {
+int main() {
 
 	short audio[16000*60];
 	char file[32] = "../assets/wwvh/phone.wav";

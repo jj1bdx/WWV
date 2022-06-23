@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <sndfile.h>
 
-int main(int argc, char *argv[]) {
+int main() {
 	// lengths
 	int sizes[2];
 

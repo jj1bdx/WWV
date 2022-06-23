@@ -38,6 +38,7 @@
 #include <stdint.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <samplerate.h>
 
 #ifdef DIRECT
 #include <portaudio.h>
@@ -128,6 +129,17 @@ static void wait_for_start() {
 		msleep(10);
 	}
 }
+
+#if 0
+static void *output_thread(void *arg) {
+}
+
+static void *clock_thread(void *arg) {
+}
+
+static void *sync_thread(void *arg) {
+}
+#endif
 
 // Is specified year a leap year?
 static int is_leap_year(int y) {

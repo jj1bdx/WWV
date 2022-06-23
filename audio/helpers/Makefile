@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -O2 -Wall -pedantic -lsndfile -s
+CFLAGS = -O2 -Wall -Wextra -pedantic -lsndfile -s
 
 all: helpers
 

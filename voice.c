@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 
 #include "audio/time_nums.h"
 #include "audio/time_ann.h"
@@ -8,7 +9,7 @@ void build_time_announcement(int hour, int minute, int h, int len, short *voice)
 	int number_offset = 0;
 	int number_len = 0;
 	int time_ann_offset = 0;
-	short out_buffer[16000*60*2] = {0}; // doubled just in case
+	short *out_buffer;
 
 	short *nums;
 	int *nums_sizes;
@@ -27,12 +28,14 @@ void build_time_announcement(int hour, int minute, int h, int len, short *voice)
 		time_ann_sizes = wwv_time_ann_sizes;
 	}
 
+	out_buffer = malloc(16000 * 60 * 2 * sizeof(*voice)); // doubled just in case
+
 	// at the tone
 	memcpy(out_buffer, time_ann, time_ann_sizes[0]*sizeof(*voice));
 	time_ann_offset += time_ann_sizes[0];
 	samples += time_ann_sizes[0];
 
-	samples += 100*25;
+	samples += 100*50;
 
 	// # of hours
 	for (int i = 0; i < 24; i++) {
@@ -51,11 +54,11 @@ void build_time_announcement(int hour, int minute, int h, int len, short *voice)
 	time_ann_offset += time_ann_sizes[1];
 	samples += time_ann_sizes[1];
 
-	samples += 100*25;
+	samples += 100*50;
 
 	// # of minutes
 	number_offset = 0;
-	for (int i = 0; i < 61; i++) {
+	for (int i = 0; i < 60; i++) {
 		if (i == minute) {
 			number_len = nums_sizes[i];
 			memcpy(out_buffer+samples, nums+number_offset,
@@ -72,7 +75,7 @@ void build_time_announcement(int hour, int minute, int h, int len, short *voice)
 	samples += time_ann_sizes[2];
 
 	// add pause
-	samples += 100*50;
+	samples += 100*100;
 
 	// coordinated universal time
 	memcpy(out_buffer+samples, time_ann+time_ann_offset, time_ann_sizes[3]*sizeof(*voice));
@@ -81,4 +84,5 @@ void build_time_announcement(int hour, int minute, int h, int len, short *voice)
 	if (samples > len) samples = len;
 
 	memcpy(voice, out_buffer, samples*sizeof(*voice));
+	free(out_buffer);
 }
