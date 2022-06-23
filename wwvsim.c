@@ -652,9 +652,9 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 		announce_geophys(output,1000,45000,1);
 	/* Sprint LTE and T-Mobile UMTS shutdown announcement (unofficial) */
 	} else if (!wwvh && minute == 14) {
-		announce_3g_shutdown(output, 100, 45000, 0);
+		announce_3g_shutdown(output, 1000, 45000, 0);
 	} else if (wwvh && minute == 15) {
-		announce_3g_shutdown(output, 100, 45000, 1);
+		announce_3g_shutdown(output, 1000, 45000, 1);
 	} else {
 		if (tone)
 			add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec

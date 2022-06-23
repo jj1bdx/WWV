@@ -30,12 +30,15 @@ void build_time_announcement(int hour, int minute, int h, int len, short *voice)
 
 	out_buffer = malloc(16000 * 60 * 2 * sizeof(*voice)); // doubled just in case
 
+	/* clear out buffer */
+	memset(out_buffer, 0, 16000 * 60 * 2 * sizeof(*voice));
+
 	// at the tone
 	memcpy(out_buffer, time_ann, time_ann_sizes[0]*sizeof(*voice));
 	time_ann_offset += time_ann_sizes[0];
 	samples += time_ann_sizes[0];
 
-	samples += 100*50;
+	samples += 100*25;
 
 	// # of hours
 	for (int i = 0; i < 24; i++) {
@@ -54,7 +57,7 @@ void build_time_announcement(int hour, int minute, int h, int len, short *voice)
 	time_ann_offset += time_ann_sizes[1];
 	samples += time_ann_sizes[1];
 
-	samples += 100*50;
+	samples += 100*25;
 
 	// # of minutes
 	number_offset = 0;
@@ -75,7 +78,7 @@ void build_time_announcement(int hour, int minute, int h, int len, short *voice)
 	samples += time_ann_sizes[2];
 
 	// add pause
-	samples += 100*100;
+	samples += 100*50;
 
 	// coordinated universal time
 	memcpy(out_buffer+samples, time_ann+time_ann_offset, time_ann_sizes[3]*sizeof(*voice));
