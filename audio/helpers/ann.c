@@ -25,7 +25,7 @@ int main() {
 	short audio[16000*60] = {0};
 	char file[32];
 
-	char *stations[] = {"wwv" , "wwvh"};
+	char *stations[] = {"wwv", "wwvh"};
 	char *ann[] = {"att", "hours", "minutes", "utc"};
 
 	SNDFILE *inf;

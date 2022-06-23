@@ -22,17 +22,18 @@ int main() {
 	// lengths
 	int sizes[2];
 
-	short audio[16000*60] = {0};
+	short audio[16000*60*2] = {0};
 	char file[32];
 
-	char *stations[] = {"wwv" , "wwvh"};
+	char *stations[] = {"wwv", "wwvh"};
 
 	SNDFILE *inf;
 	SF_INFO sfinfo;
 
 	int frames;
+	int total_frames = 0;
 
-	int newline;
+	int newline = 0;
 
 	for (int i = 0; i < 2; i++) {
 		snprintf(file, 32, "../assets/%s/id.wav", stations[i]);
@@ -41,29 +42,26 @@ int main() {
 		frames = sfinfo.frames;
 		sizes[i] = frames;
 
-		sf_read_short(inf, audio, frames);
+		sf_read_short(inf, audio + total_frames, frames);
 		sf_close(inf);
 
-		newline = 0;
-
-		printf("short %s_id[%d] = {\n", stations[i], frames);
-		for (int j = 0; j < frames; j++) {
-			if (j == frames - 1) {
-				printf("%6d\n", audio[j]);
-			} else {
-				printf("%6d,", audio[j]);
-			}
-			if (++newline == 10) {
-				printf("\n");
-				newline = 0;
-			}
-		}
-		printf("};\n");
-
-		fprintf(stderr, "extern short %s_id[%d];\n", stations[i], frames);
-
-		printf("\n");
+		total_frames += frames;
 	}
+
+	printf("short id[%d] = {\n", total_frames);
+	for (int i = 0; i < total_frames; i++) {
+		if (i == total_frames - 1) {
+			printf("%6d\n", audio[i]);
+		} else {
+			printf("%6d,", audio[i]);
+		}
+		if (++newline == 10) {
+			printf("\n");
+			newline = 0;
+		}
+	}
+	printf("};\n");
+	fprintf(stderr, "extern short id[%d];\n", total_frames);
 
 	printf("int id_sizes[%d] = {\n", 2);
 	for (int i = 0; i < 2; i++) {

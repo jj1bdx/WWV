@@ -22,7 +22,7 @@ int main() {
 	// lengths
 	int sizes[2];
 
-	short audio[16000*60] = {0};
+	short audio[16000*60*2] = {0};
 	char file[32];
 
 	char *stations[] = {"wwv", "wwvh"};
@@ -31,36 +31,37 @@ int main() {
 	SF_INFO sfinfo;
 
 	int frames;
+	int total_frames = 0;
 
-	int newline;
+	int newline = 0;
 
-	for (int k = 0; k < 2; k++) {
-		snprintf(file, 32, "../assets/%s/3g-shutdown.wav", stations[k]);
+	for (int i = 0; i < 2; i++) {
+		snprintf(file, 32, "../assets/%s/3g-shutdown.wav", stations[i]);
 		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
 
 		frames = sfinfo.frames;
-		sizes[k] = frames;
+		sizes[i] = frames;
 
-		sf_read_short(inf, audio, frames);
+		sf_read_short(inf, audio + total_frames, frames);
 		sf_close(inf);
 
-		newline = 0;
-
-		printf("short %s_3g_shutdown_ann[%d] = {\n", stations[k], frames);
-		for (int j = 0; j < frames; j++) {
-			if (j == frames - 1) {
-				printf("%6d\n", audio[j]);
-			} else {
-				printf("%6d,", audio[j]);
-			}
-			if (++newline == 10) {
-				printf("\n");
-				newline = 0;
-			}
-		}
-		printf("};\n");
-		fprintf(stderr, "extern short %s_3g_shutdown_ann[%d];\n", stations[k], frames);
+		total_frames += frames;
 	}
+
+	printf("short _3g_shutdown_ann[%d] = {\n", total_frames);
+	for (int i = 0; i < total_frames; i++) {
+		if (i == total_frames - 1) {
+			printf("%6d\n", audio[i]);
+		} else {
+			printf("%6d,", audio[i]);
+		}
+		if (++newline == 10) {
+			printf("\n");
+			newline = 0;
+		}
+	}
+	printf("};\n");
+	fprintf(stderr, "extern short _3g_shutdown_ann[%d];\n", total_frames);
 
 	printf("int _3g_shutdown_ann_sizes[2] = {\n");
 	for (int i = 0; i < 2; i++) {

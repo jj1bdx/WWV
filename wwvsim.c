@@ -307,9 +307,9 @@ static int announce_station(int16_t *audio, int startms, int stopms, int wwvh) {
 	int max_len = (stopms - startms)*Samprate_ms;
 	int samples = id_sizes[wwvh];
 	if (samples > max_len) samples = max_len;
-	short *id = wwvh ? wwvh_id : wwv_id;
+	short *this_id = wwvh ? id + id_sizes[0]: id;
 
-	memcpy(audio + startms*Samprate_ms, id, samples*sizeof(*audio));
+	memcpy(audio + startms*Samprate_ms, this_id, samples*sizeof(*audio));
 	return 0;
 }
 
@@ -321,9 +321,9 @@ static int announce_mars(int16_t *audio, int startms, int stopms, int wwvh) {
 	int max_len = (stopms - startms)*Samprate_ms;
 	int samples = mars_ann_sizes[wwvh];
 	if (samples > max_len) samples = max_len;
-	short *mars_ann = wwvh ? wwvh_mars_ann : wwv_mars_ann;
+	short *this_mars_ann = wwvh ? mars_ann + mars_ann_sizes[0] : mars_ann;
 
-	memcpy(audio + startms*Samprate_ms, mars_ann, samples*sizeof(*audio));
+	memcpy(audio + startms*Samprate_ms, this_mars_ann, samples*sizeof(*audio));
 	return 0;
 }
 
@@ -362,9 +362,9 @@ static int announce_3g_shutdown(int16_t *audio, int startms, int stopms, int wwv
 	int max_len = (stopms - startms)*Samprate_ms;
 	int samples = _3g_shutdown_ann_sizes[wwvh];
 	if (samples > max_len) samples = max_len;
-	short *_3g_shutdown_ann = wwvh ? wwvh_3g_shutdown_ann : wwv_3g_shutdown_ann;
+	short *this_3g_ann = wwvh ? _3g_shutdown_ann + _3g_shutdown_ann_sizes[0] : _3g_shutdown_ann;
 
-	memcpy(audio + startms*Samprate_ms, _3g_shutdown_ann, samples*sizeof(*audio));
+	memcpy(audio + startms*Samprate_ms, this_3g_ann, samples*sizeof(*audio));
 	return 0;
 }
 

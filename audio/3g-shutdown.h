@@ -1,3 +1,2 @@
-extern short wwv_3g_shutdown_ann[330806];
-extern short wwvh_3g_shutdown_ann[323631];
+extern short _3g_shutdown_ann[654437];
 extern int _3g_shutdown_ann_sizes[2];
