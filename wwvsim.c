@@ -49,6 +49,8 @@
 #include "audio/mars_ann.h"
 #include "audio/wwvh_phone.h"
 #include "audio/geophys_ann.h"
+/* 3G shutdown announcement (unofficial) */
+#include "audio/3g-shutdown.h"
 
 /* workaround for missing pi definition */
 #ifndef M_PI
@@ -164,7 +166,7 @@ static int Days_in_month[] = { // Index 1 = January, 12 = December
 // Special exception: no 440 Hz tone in first hour of UTC day; must be handled ad-hoc
 static int WWV_tone_schedule[60] = {
     0,600,440,  0,  0,600,500,600,500,600, // 3 is nist reserved at wwvh, 4 reserved at wwv; 8-10 storms; 7 undoc wwv
-    0,600,500,600,500,600,500,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
+    0,600,500,600,  0,  0,500,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
   500,600,500,600,500,600,500,600,500,  0, // 29 is silent to protect wwvh id
     0,600,500,600,500,600,500,600,500,600, // 30 is station ID
   500,600,500,  0,  0,  0,  0,  0,  0,  0, // 43-51 is silent period to protect wwvh
@@ -349,6 +351,20 @@ static int announce_geophys(int16_t *audio, int startms, int stopms, int wwvh) {
 	short *geophys_ann = wwvh ? wwvh_geophys_ann : wwv_geophys_ann;
 
 	memcpy(audio + startms*Samprate_ms, geophys_ann, samples*sizeof(*audio));
+	return 0;
+}
+
+/* Sprint LTE and T-Mobile UMTS shutdown announcement: WWV/H */
+static int announce_3g_shutdown(int16_t *audio, int startms, int stopms, int wwvh) {
+	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+		return -1;
+
+	int max_len = (stopms - startms)*Samprate_ms;
+	int samples = _3g_shutdown_ann_sizes[wwvh];
+	if (samples > max_len) samples = max_len;
+	short *_3g_shutdown_ann = wwvh ? wwvh_3g_shutdown_ann : wwv_3g_shutdown_ann;
+
+	memcpy(audio + startms*Samprate_ms, _3g_shutdown_ann, samples*sizeof(*audio));
 	return 0;
 }
 
@@ -634,6 +650,11 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 	/* ... and on minute 45 */
 	} else if (wwvh && minute == 45) {
 		announce_geophys(output,1000,45000,1);
+	/* Sprint LTE and T-Mobile UMTS shutdown announcement (unofficial) */
+	} else if (!wwvh && minute == 14) {
+		announce_3g_shutdown(output, 100, 45000, 0);
+	} else if (wwvh && minute == 15) {
+		announce_3g_shutdown(output, 100, 45000, 1);
 	} else {
 		if (tone)
 			add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
