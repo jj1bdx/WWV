@@ -166,7 +166,7 @@ static int Days_in_month[] = { // Index 1 = January, 12 = December
 // Special exception: no 440 Hz tone in first hour of UTC day; must be handled ad-hoc
 static int WWV_tone_schedule[60] = {
     0,600,440,  0,  0,600,500,600,500,600, // 3 is nist reserved at wwvh, 4 reserved at wwv; 8-10 storms; 7 undoc wwv
-    0,600,500,600,  0,  0,500,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
+    0,600,500,600,  0,600,  0,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
   500,600,500,600,500,600,500,600,500,  0, // 29 is silent to protect wwvh id
     0,600,500,600,500,600,500,600,500,600, // 30 is station ID
   500,600,500,  0,  0,  0,  0,  0,  0,  0, // 43-51 is silent period to protect wwvh
@@ -178,7 +178,7 @@ static int WWVH_tone_schedule[60] = {
     0,  0,600,500,  0,  0,  0,  0,  0,  0, // 14-19 is silent period to protect wwv; 11 silent to protect undoc wwv
   600,500,600,500,600,500,600,500,600,  0, // 29 is station ID
     0,500,600,500,600,500,600,500,600,500, // 30 silent to protect wwv id
-  600,500,600,500,600,  0,600,  0,  0,  0, // 43-44 GPS (unused-tones); 45 geoalerts; 47 nist reserved; 48-51 storms
+  600,500,600,500,  0,  0,  0,  0,  0,  0, // 43-44 GPS (unused-tones); 45 geoalerts; 47 nist reserved; 48-51 storms
     0,  0,  0,500,600,500,600,500,600,  0  // 59 is station ID; 52 new special at wwvh?, NOT protected at WWV
 };
 
@@ -651,9 +651,9 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 	} else if (wwvh && minute == 45) {
 		announce_geophys(output,1000,45000,1);
 	/* Sprint LTE and T-Mobile UMTS shutdown announcement (unofficial) */
-	} else if (!wwvh && minute == 14) {
+	} else if (!wwvh && (minute == 14 || minute == 44)) {
 		announce_3g_shutdown(output, 1000, 45000, 0);
-	} else if (wwvh && minute == 15) {
+	} else if (wwvh && (minute == 16 || minute == 46)) {
 		announce_3g_shutdown(output, 1000, 45000, 1);
 	} else {
 		if (tone)
@@ -997,7 +997,6 @@ int main(int argc,char *argv[]) {
 			// on all subsequent minutes the entire buffer will be written
 			for (int i = 0; i < length; i++) {
 				fwrite(audio + Samprate * i, sizeof(*audio), Samprate, stdout);
-				fflush(stdout);
 			}
 
 #ifdef DIRECT
