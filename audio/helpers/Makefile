@@ -3,7 +3,7 @@ CFLAGS = -O2 -Wall -Wextra -pedantic -lsndfile -s
 
 all: helpers
 
-helpers: ann id mars nums phone 3g-shutdown
+helpers: ann id mars nums phone hamsci 3g-shutdown
 
 audio-src:
 	./create-audio-data.sh
@@ -23,8 +23,11 @@ nums: nums.c
 phone: phone.c
 	$(CC) -o phone $< $(CFLAGS)
 
+hamsci: hamsci.o
+	$(CC) -o hamsci $< $(CFLAGS)
+
 3g-shutdown: 3g-shutdown.c
 	$(CC) -o 3g-shutdown $< $(CFLAGS)
 
 clean:
-	rm -f ann id mars nums phone
+	rm -f ann id mars nums phone hamsci

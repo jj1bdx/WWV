@@ -1,5 +1,5 @@
 CC = gcc
-AUDIO = mars_ann.o wwvh_phone.o id.o time_nums.o time_ann.o geophys_ann.o 3g-shutdown.o
+AUDIO = mars_ann.o wwvh_phone.o id.o time_nums.o time_ann.o geophys_ann.o 3g-shutdown.o hamsci.o
 
 all: audio.a
 

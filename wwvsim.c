@@ -49,6 +49,8 @@
 #include "audio/mars_ann.h"
 #include "audio/wwvh_phone.h"
 #include "audio/geophys_ann.h"
+/* HamSci */
+#include "audio/hamsci.h"
 /* 3G shutdown announcement (unofficial) */
 #include "audio/3g-shutdown.h"
 
@@ -354,6 +356,32 @@ static int announce_geophys(int16_t *audio, int startms, int stopms, int wwvh) {
 	return 0;
 }
 
+/* HamSci (announcement) */
+static int announce_hamsci_ann(int16_t *audio, int startms, int stopms) {
+	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+		return -1;
+
+	int max_len = (stopms - startms)*Samprate_ms;
+	int samples = hamsci_ann_size;
+	if (samples > max_len) samples = max_len;
+
+	memcpy(audio + startms*Samprate_ms, hamsci_ann, samples*sizeof(*audio));
+	return 0;
+}
+
+/* HamSci (test signal) */
+static int announce_hamsci(int16_t *audio, int startms, int stopms) {
+	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
+		return -1;
+
+	int max_len = (stopms - startms)*Samprate_ms;
+	int samples = hamsci_test_size;
+	if (samples > max_len) samples = max_len;
+
+	memcpy(audio + startms*Samprate_ms, hamsci_test, samples*sizeof(*audio));
+	return 0;
+}
+
 /* Sprint LTE and T-Mobile UMTS shutdown announcement: WWV/H */
 static int announce_3g_shutdown(int16_t *audio, int startms, int stopms, int wwvh) {
 	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
@@ -636,10 +664,10 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 	} else if (!wwvh && (minute == 0 || minute == 30)) {
 		announce_station(output,1000,45000,0);
 	/* DoD M.A.R.S. announcement on minute 10 */
-	} else if (!wwvh && (minute == 4 || minute == 10)) {
+	} else if (!wwvh && (minute == 10)) {
 		announce_mars(output,1000, 45000, 0);
 	/* ...and on minute 50 */
-	} else if (wwvh && (minute == 3 || minute == 50)) {
+	} else if (wwvh && (minute == 50)) {
 		announce_mars(output,1000,45000,1);
 	/* dial-in information broadcast on WWVH only */
 	} else if (wwvh && (minute == 47 || minute == 52)) {
@@ -650,6 +678,15 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 	/* ... and on minute 45 */
 	} else if (wwvh && minute == 45) {
 		announce_geophys(output,1000,45000,1);
+	/* HamSci */
+	} else if (!wwvh && minute == 4) {
+		announce_hamsci_ann(output, 1000, 45000);
+	} else if (wwvh && minute == 3) {
+		announce_hamsci_ann(output, 1000, 45000);
+	} else if (!wwvh && minute == 8) {
+		announce_hamsci(output, 1000, 45000);
+	} else if (wwvh && minute == 40) {
+		announce_hamsci(output, 1000, 45000);
 	/* Sprint LTE and T-Mobile UMTS shutdown announcement (unofficial) */
 	} else if (!wwvh && (minute == 14 || minute == 44)) {
 		announce_3g_shutdown(output, 1000, 45000, 0);
