@@ -167,11 +167,11 @@ static int Days_in_month[] = { // Index 1 = January, 12 = December
 // Tone schedules for each minute of the hour for each station
 // Special exception: no 440 Hz tone in first hour of UTC day; must be handled ad-hoc
 static int WWV_tone_schedule[60] = {
-    0,600,440,  0,  0,600,500,600,500,600, // 3 is nist reserved at wwvh, 4 reserved at wwv; 8-10 storms; 7 undoc wwv
+    0,600,440,  0,  0,600,500,600,  0,600, // 3 is nist reserved at wwvh, 4 reserved at wwv; 8-10 storms; 7 undoc wwv
     0,600,500,600,  0,600,  0,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
   500,600,500,600,500,600,500,600,500,  0, // 29 is silent to protect wwvh id
     0,600,500,600,500,600,500,600,500,600, // 30 is station ID
-  500,600,500,  0,  0,  0,  0,  0,  0,  0, // 43-51 is silent period to protect wwvh
+    0,600,500,  0,  0,  0,  0,  0,  0,  0, // 43-51 is silent period to protect wwvh
     0,  0,  0,600,500,600,500,600,500,  0  // 59 is silent to protect wwvh id; 52 new special at wwvh, not protected by wwv
 };
 
@@ -180,7 +180,7 @@ static int WWVH_tone_schedule[60] = {
     0,  0,600,500,  0,  0,  0,  0,  0,  0, // 14-19 is silent period to protect wwv; 11 silent to protect undoc wwv
   600,500,600,500,600,500,600,500,600,  0, // 29 is station ID
     0,500,600,500,600,500,600,500,600,500, // 30 silent to protect wwv id
-  600,500,600,500,  0,  0,  0,  0,  0,  0, // 43-44 GPS (unused-tones); 45 geoalerts; 47 nist reserved; 48-51 storms
+    0,500,600,500,  0,  0,  0,  0,  0,  0, // 43-44 GPS (unused-tones); 45 geoalerts; 47 nist reserved; 48-51 storms
     0,  0,  0,500,600,500,600,500,600,  0  // 59 is station ID; 52 new special at wwvh?, NOT protected at WWV
 };
 
