@@ -665,10 +665,10 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 		announce_station(output,1000,45000,0);
 	/* DoD M.A.R.S. announcement on minute 10 */
 	} else if (!wwvh && (minute == 10)) {
-		announce_mars(output,1000, 45000, 0);
+		announce_mars(output, 2000, 45000, 0);
 	/* ...and on minute 50 */
 	} else if (wwvh && (minute == 50)) {
-		announce_mars(output,1000,45000,1);
+		announce_mars(output, 2000, 45000, 1);
 	/* dial-in information broadcast on WWVH only */
 	} else if (wwvh && (minute == 47 || minute == 52)) {
 		announce_phone(output,1000, 45000);
@@ -680,18 +680,18 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 		announce_geophys(output,1000,45000,1);
 	/* HamSci */
 	} else if (!wwvh && minute == 4) {
-		announce_hamsci_ann(output, 1000, 45000);
+		announce_hamsci_ann(output, 2000, 45000);
 	} else if (wwvh && minute == 3) {
-		announce_hamsci_ann(output, 1000, 45000);
+		announce_hamsci_ann(output, 2000, 45000);
 	} else if (!wwvh && minute == 8) {
-		announce_hamsci(output, 1000, 45000);
+		announce_hamsci(output, 2000, 45000);
 	} else if (wwvh && minute == 40) {
-		announce_hamsci(output, 1000, 45000);
+		announce_hamsci(output, 2000, 45000);
 	/* Sprint LTE and T-Mobile UMTS shutdown announcement (unofficial) */
 	} else if (!wwvh && (minute == 14 || minute == 44)) {
-		announce_3g_shutdown(output, 1000, 45000, 0);
+		announce_3g_shutdown(output, 2000, 45000, 0);
 	} else if (wwvh && (minute == 16 || minute == 46)) {
-		announce_3g_shutdown(output, 1000, 45000, 1);
+		announce_3g_shutdown(output, 2000, 45000, 1);
 	} else {
 		if (tone)
 			add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
