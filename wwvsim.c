@@ -45,10 +45,10 @@
 #endif
 
 #include "voice.h"
+#include "geophys.h"
 #include "audio/id.h"
 #include "audio/mars_ann.h"
 #include "audio/wwvh_phone.h"
-#include "audio/geophys_ann.h"
 /* HamSci */
 #include "audio/hamsci.h"
 /* 3G shutdown announcement (unofficial) */
@@ -342,17 +342,20 @@ static int announce_phone(int16_t *audio, int startms, int stopms) {
 	return 0;
 }
 
-// Geophysical report: WWV/H (no actual messages yet)
-static int announce_geophys(int16_t *audio, int startms, int stopms, int wwvh) {
+// Geophysical report: WWV (no actual messages yet)
+static int announce_geophys(int16_t *audio, int startms, int stopms,
+	int this_hour, int this_month, int month_of_prev_day, int prev_day, int day) {
 	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
 		return -1;
 
-	int max_len = (stopms - startms)*Samprate_ms;
-	int samples = geophys_ann_sizes[wwvh];
-	if (samples > max_len) samples = max_len;
-	short *geophys_ann = wwvh ? wwvh_geophys_ann : wwv_geophys_ann;
+	build_geophys_announcement(this_hour,
+		month_of_prev_day, this_month,
+		prev_day, day,
+		1,
+		1,
+		1,
+		(stopms - startms)*Samprate_ms, audio + startms*Samprate_ms);
 
-	memcpy(audio + startms*Samprate_ms, geophys_ann, samples*sizeof(*audio));
 	return 0;
 }
 
@@ -622,7 +625,8 @@ static void decode_timecode(unsigned char *code,int length) {
 }
 
 // Insert tone or announcement into seconds 1-44
-static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minute) {
+static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minute,
+	int month_of_prev_day, int prev_day, int month, int day) {
 	const double tone_amp = pow(10.,-6.0/20.); // -6 dB
 
 #if 0
@@ -674,10 +678,12 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 		announce_phone(output,1000, 45000);
 	/* geophysical alerts on minute 18 */
 	} else if (!wwvh && minute == 18) {
-		announce_geophys(output,1000,45000,0);
+		announce_geophys(output, 1000, 45000,
+			hour, month, month_of_prev_day, prev_day, day);
 	/* ... and on minute 45 */
 	} else if (wwvh && minute == 45) {
-		announce_geophys(output,1000,45000,1);
+		announce_geophys(output, 1000, 45000,
+			hour, month, month_of_prev_day, prev_day, day);
 	/* HamSci */
 	} else if (!wwvh && minute == 4) {
 		announce_hamsci_ann(output, 2000, 45000);
@@ -710,7 +716,8 @@ done:
 
 
 
-static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1,int hour,int minute) {
+static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1,int hour,int minute,
+	int month_of_prev_day, int prev_day, int cur_month, int cur_day) {
 	// Amplitudes
 	// NIST 250-67, p 50
 	const double marker_high_amp = pow(10.,-6.0/20.);
@@ -724,7 +731,8 @@ static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,i
 
 	// Build a minute of audio
 	memset(output,0,length*Samprate*sizeof(*output)); // Clear previous audio
-	gen_tone_or_announcement(output,wwvh,hour,minute);
+	gen_tone_or_announcement(output,wwvh,hour,minute,
+		month_of_prev_day, prev_day, cur_month, cur_day);
 
 	// Insert minute announcement
 	int nextminute,nexthour; // What are the next hour and minute?
@@ -842,6 +850,7 @@ static int pa_callback(const void *inputBuffer, void *outputBuffer,
 int main(int argc,char *argv[]) {
 	int c;
 	int year,month,day,hour,minute;
+	int month_of_prev_day = 0, prev_day = 0;
 	int dut1 = 0;
 	int manual_time = 0;
 #ifdef DIRECT
@@ -1021,7 +1030,8 @@ int main(int argc,char *argv[]) {
 		}
 
 		// Build a minute of audio
-		makeminute(audio,length,WWVH,code,dut1,hour,minute);
+		makeminute(audio,length,WWVH,code,dut1,hour,minute,
+				month_of_prev_day, prev_day, month, day);
 
 #ifdef DIRECT
 		if (!Direct_mode) {
@@ -1055,6 +1065,10 @@ int main(int argc,char *argv[]) {
 			Negative_leap_second_pending = 0;
 			dut1 -= 10;
 		}
+
+		/* yesterday's day and month */
+		month_of_prev_day = month;
+		prev_day = day;
 
 		// Advance to next minute
 		if (++minute > 59) {
