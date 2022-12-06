@@ -17,12 +17,13 @@
  */
 #include <stdlib.h>
 #include <sndfile.h>
+#include "header.h"
 
 int main() {
-	// lengths
+	/* lengths */
 	int sizes[60];
 
-	short audio[16000*60*2] = {0};
+	short *audio;
 	char file[32];
 
 	char *stations[] = {"wwv", "wwvh"};
@@ -38,8 +39,13 @@ int main() {
 
 	const int default_num_size = 10;
 
+	audio = malloc(16000*60*2*2 * sizeof(short));
+
+	printf(HEADER);
+	fprintf(stderr, HEADER);
+
 	for (int i = 0; i < 2; i++) {
-		total_frames = 0; // accumulated number of frames for each station
+		total_frames = 0; /* accumulated number of frames for each station */
 
 		for (int j = 0; j < 60; j++) {
 			not_found[j] = 0;
@@ -78,8 +84,6 @@ int main() {
 
 		newline = 0;
 
-		fprintf(stderr, "extern short %s_nums[%d];\n", stations[i], total_frames);
-
 		printf("int %s_nums_sizes[%d] = {\n", stations[i], 60);
 		for (int j = 0; j < 60; j++) {
 			if (not_found[j]) {
@@ -102,9 +106,11 @@ int main() {
 		}
 		printf("};\n");
 
+		fprintf(stderr, "extern short %s_nums[%d];\n", stations[i], total_frames);
 		fprintf(stderr, "extern int %s_nums_sizes[%d];\n", stations[i], 60);
-
-		printf("\n");
 	}
+
+	free(audio);
+
 	return 0;
 }

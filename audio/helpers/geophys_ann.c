@@ -17,12 +17,13 @@
  */
 #include <stdlib.h>
 #include <sndfile.h>
+#include "header.h"
 
 int main() {
-	// lengths
-	int sizes[8];
+	/* lengths */
+	int sizes[9];
 
-	short audio[16000*60] = {0};
+	short *audio;
 	char file[64];
 
 	char *ann[] = {
@@ -33,6 +34,7 @@ int main() {
 		"the_estimated_planetary_k_index_at",
 		"utc_on",
 		"was",
+		"point",
 		"no_space"
 	};
 
@@ -44,9 +46,11 @@ int main() {
 
 	int newline;
 
+	audio = malloc(16000*10*9 * sizeof(short));
+
 	total_frames = 0;
 
-	for (int i = 0; i < 8; i++) {
+	for (int i = 0; i < 9; i++) {
 		snprintf(file, 64, "../assets/geophys/%s.wav", ann[i]);
 		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
 
@@ -61,6 +65,7 @@ int main() {
 
 	newline = 0;
 
+	printf(HEADER);
 	printf("short geophys_ann[%d] = {\n", total_frames);
 	for (int i = 0; i < total_frames; i++) {
 		if (i == total_frames - 1) {
@@ -75,11 +80,9 @@ int main() {
 	}
 	printf("};\n");
 
-	fprintf(stderr, "extern short geophys_ann[%d];\n", total_frames);
-
-	printf("int geophys_ann_sizes[%d] = {\n", 8);
-	for (int i = 0; i < 8; i++) {
-		if (i == 8 - 1) {
+	printf("int geophys_ann_sizes[%d] = {\n", 9);
+	for (int i = 0; i < 9; i++) {
+		if (i == 9 - 1) {
 			printf("%6d\n", sizes[i]);
 		} else {
 			printf("%6d,", sizes[i]);
@@ -87,7 +90,11 @@ int main() {
 	}
 	printf("};\n");
 
-	fprintf(stderr, "extern int geophys_ann_sizes[%d];\n", 8);
+	fprintf(stderr, HEADER);
+	fprintf(stderr, "extern short geophys_ann[%d];\n", total_frames);
+	fprintf(stderr, "extern int geophys_ann_sizes[%d];\n", 9);
+
+	free(audio);
 
 	return 0;
 }

@@ -17,29 +17,33 @@
  */
 #include <stdlib.h>
 #include <sndfile.h>
+#include "header.h"
 
 int main() {
-	short audio[16000*60*2] = {0};
+	short *audio;
 	char file[32];
 
 	SNDFILE *inf;
 	SF_INFO sfinfo;
 
-	int frames;
+	int frames[2];
 
 	int newline = 0;
+
+	audio = malloc(16000*60*2 * sizeof(short));
 
 	snprintf(file, 32, "../assets/hamsci_ann.wav");
 	if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
 
-	frames = sfinfo.frames;
+	frames[0] = sfinfo.frames;
 
-	sf_read_short(inf, audio, frames);
+	sf_read_short(inf, audio, frames[0]);
 	sf_close(inf);
 
-	printf("short hamsci_ann[%d] = {\n", frames);
-	for (int i = 0; i < frames; i++) {
-		if (i == frames - 1) {
+	printf(HEADER);
+	printf("short hamsci_ann[%d] = {\n", frames[0]);
+	for (int i = 0; i < frames[0]; i++) {
+		if (i == frames[0] - 1) {
 			printf("%6d\n", audio[i]);
 		} else {
 			printf("%6d,", audio[i]);
@@ -50,22 +54,19 @@ int main() {
 		}
 	}
 	printf("};\n");
-	fprintf(stderr, "extern short hamsci_ann[%d];\n", frames);
-
-	printf("int hamsci_ann_size = %d;\n", frames);
-	fprintf(stderr, "extern int hamsci_ann_size;\n");
+	printf("int hamsci_ann_size = %d;\n", frames[0]);
 
 	snprintf(file, 32, "../assets/hamsci_test.wav");
 	if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
 
-	frames = sfinfo.frames;
+	frames[1] = sfinfo.frames;
 
-	sf_read_short(inf, audio, frames);
+	sf_read_short(inf, audio, frames[1]);
 	sf_close(inf);
 
-	printf("short hamsci_test[%d] = {\n", frames);
-	for (int i = 0; i < frames; i++) {
-		if (i == frames - 1) {
+	printf("short hamsci_test[%d] = {\n", frames[1]);
+	for (int i = 0; i < frames[1]; i++) {
+		if (i == frames[1] - 1) {
 			printf("%6d\n", audio[i]);
 		} else {
 			printf("%6d,", audio[i]);
@@ -76,10 +77,15 @@ int main() {
 		}
 	}
 	printf("};\n");
-	fprintf(stderr, "extern short hamsci_test[%d];\n", frames);
+	printf("int hamsci_test_size = %d;\n", frames[1]);
 
-	printf("int hamsci_test_size = %d;\n", frames);
+	fprintf(stderr, HEADER);
+	fprintf(stderr, "extern short hamsci_ann[%d];\n", frames[0]);
+	fprintf(stderr, "extern int hamsci_ann_size;\n");
+	fprintf(stderr, "extern short hamsci_test[%d];\n", frames[1]);
 	fprintf(stderr, "extern int hamsci_test_size;\n");
+
+	free(audio);
 
 	return 0;
 }

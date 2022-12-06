@@ -17,10 +17,10 @@
  */
 #include <stdlib.h>
 #include <sndfile.h>
+#include "header.h"
 
 int main() {
-
-	short audio[16000*60];
+	short *audio;
 	char file[32] = "../assets/wwvh/phone.wav";
 
 	SNDFILE *inf;
@@ -28,6 +28,8 @@ int main() {
 
 	int frames;
 	int newline;
+
+	audio = malloc(16000*60 * sizeof(short));
 
 	if (!(inf = sf_open(file, SFM_READ, &sfinfo))) {
 		frames = 2;
@@ -40,6 +42,7 @@ int main() {
 
 	newline = 0;
 
+	printf(HEADER);
 	printf("short wwvh_phone[%d] = {\n", frames);
 	for (int i = 0; i < frames; i++) {
 		if (i == frames - 1) {
@@ -53,11 +56,13 @@ int main() {
 		}
 	}
 	printf("};\n");
-
 	printf("int wwvh_phone_size = %d;\n", frames);
 
+	fprintf(stderr, HEADER);
 	fprintf(stderr, "extern short wwvh_phone[%d];\n", frames);
 	fprintf(stderr, "extern int wwvh_phone_size;\n");
+
+	free(audio);
 
 	return 0;
 }

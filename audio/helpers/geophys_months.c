@@ -17,12 +17,13 @@
  */
 #include <stdlib.h>
 #include <sndfile.h>
+#include "header.h"
 
 int main() {
-	// lengths
+	/* lengths */
 	int sizes[12];
 
-	short audio[16000*12*3] = {0};
+	short *audio;
 	char file[32];
 
 	char *months[] = {
@@ -51,7 +52,9 @@ int main() {
 
 	const int default_num_size = 10;
 
-	total_frames = 0; // accumulated number of frames for each station
+	audio = malloc(16000*3*12 * sizeof(short));
+
+	total_frames = 0; /* accumulated number of frames for each station */
 
 	for (int i = 0; i < 12; i++) {
 		not_found[i] = 0;
@@ -74,6 +77,7 @@ int main() {
 
 	newline = 0;
 
+	printf(HEADER);
 	printf("short geophys_months[%d] = {\n", total_frames);
 	for (int i = 0; i < total_frames; i++) {
 		if (i == total_frames - 1) {
@@ -89,8 +93,6 @@ int main() {
 	printf("};\n");
 
 	newline = 0;
-
-	fprintf(stderr, "extern short geophys_months[%d];\n", total_frames);
 
 	printf("int geophys_months_sizes[%d] = {\n", 12);
 	for (int i = 0; i < 12; i++) {
@@ -113,10 +115,13 @@ int main() {
 		}
 	}
 	printf("};\n");
+	printf("\n");
 
+	fprintf(stderr, HEADER);
+	fprintf(stderr, "extern short geophys_months[%d];\n", total_frames);
 	fprintf(stderr, "extern int geophys_months_sizes[%d];\n", 12);
 
-	printf("\n");
+	free(audio);
 
 	return 0;
 }

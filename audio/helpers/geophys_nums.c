@@ -17,28 +17,33 @@
  */
 #include <stdlib.h>
 #include <sndfile.h>
+#include "header.h"
+
+#define MAXNUM 199
 
 int main() {
-	// lengths
-	int sizes[99];
+	/* lengths */
+	unsigned int sizes[MAXNUM + 1];
 
-	short audio[16000*99*2] = {0};
+	short *audio;
 	char file[32];
 
 	SNDFILE *inf;
 	SF_INFO sfinfo;
 
-	int frames;
-	int total_frames;
-	int not_found[99];
+	unsigned int frames;
+	unsigned int total_frames;
+	int not_found[MAXNUM + 1];
 
 	int newline;
 
 	const int default_num_size = 10;
 
-	total_frames = 0; // accumulated number of frames for each station
+	audio = malloc(16000*(MAXNUM + 1)*2 * sizeof(short));
 
-	for (int i = 0; i < 99; i++) {
+	total_frames = 0; /* accumulated number of frames for each station */
+
+	for (int i = 0; i < MAXNUM + 1; i++) {
 		not_found[i] = 0;
 		snprintf(file, 32, "../assets/geophys/%d.wav", i);
 		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) {
@@ -59,8 +64,9 @@ int main() {
 
 	newline = 0;
 
+	printf(HEADER);
 	printf("short geophys_nums[%d] = {\n", total_frames);
-	for (int i = 0; i < total_frames; i++) {
+	for (unsigned int i = 0; i < total_frames; i++) {
 		if (i == total_frames - 1) {
 			printf("%6d\n", audio[i]);
 		} else {
@@ -75,18 +81,16 @@ int main() {
 
 	newline = 0;
 
-	fprintf(stderr, "extern short geophys_nums[%d];\n", total_frames);
-
-	printf("int geophys_nums_sizes[%d] = {\n", 99);
-	for (int i = 0; i < 99; i++) {
+	printf("int geophys_nums_sizes[%d] = {\n", MAXNUM + 1);
+	for (int i = 0; i < MAXNUM + 1; i++) {
 		if (not_found[i]) {
-			if (i == 99 - 1) {
+			if (i == MAXNUM) {
 				printf("%6d /* no audio for %d */\n", default_num_size, i);
 			} else {
 				printf("%6d /* no audio for %d */,", default_num_size, i);
 			}
 		} else {
-			if (i == 99 - 1) {
+			if (i == MAXNUM) {
 				printf("%6d\n", sizes[i]);
 			} else {
 				printf("%6d,", sizes[i]);
@@ -99,9 +103,11 @@ int main() {
 	}
 	printf("};\n");
 
-	fprintf(stderr, "extern int geophys_nums_sizes[%d];\n", 99);
+	fprintf(stderr, HEADER);
+	fprintf(stderr, "extern short geophys_nums[%d];\n", total_frames);
+	fprintf(stderr, "extern int geophys_nums_sizes[%d];\n", MAXNUM + 1);
 
-	printf("\n");
+	free(audio);
 
 	return 0;
 }
