@@ -342,7 +342,7 @@ static int announce_phone(int16_t *audio, int startms, int stopms) {
 	return 0;
 }
 
-// Geophysical report: WWV (no actual messages yet)
+// Geophysical report: WWV/H (no actual messages yet)
 static int announce_geophys(int16_t *audio, int startms, int stopms,
 	int this_hour, int this_month, int month_of_prev_day, int prev_day, int day) {
 	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
@@ -678,11 +678,11 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 		announce_phone(output,1000, 45000);
 	/* geophysical alerts on minute 18 */
 	} else if (!wwvh && minute == 18) {
-		announce_geophys(output, 1000, 45000,
+		announce_geophys(output, 2500, 45000,
 			hour, month, month_of_prev_day, prev_day, day);
 	/* ... and on minute 45 */
 	} else if (wwvh && minute == 45) {
-		announce_geophys(output, 1000, 45000,
+		announce_geophys(output, 2500, 45000,
 			hour, month, month_of_prev_day, prev_day, day);
 	/* HamSci */
 	} else if (!wwvh && minute == 4) {
@@ -1066,10 +1066,6 @@ int main(int argc,char *argv[]) {
 			dut1 -= 10;
 		}
 
-		/* yesterday's day and month */
-		month_of_prev_day = month;
-		prev_day = day;
-
 		// Advance to next minute
 		if (++minute > 59) {
 			// New hour
@@ -1077,9 +1073,20 @@ int main(int argc,char *argv[]) {
 			if (++hour > 23) {
 				// New day
 				hour = 0;
+
+				/*
+				 * previous day
+				 * needed for geophysical reports
+				 */
+				prev_day = day;
+
 				if (++day > ((month == 2 && is_leap_year(year))? 29 : Days_in_month[month])) {
 					// New month
 					day = 1;
+
+					/* month of the previous day */
+					month_of_prev_day = month;
+
 					if (++month > 12) {
 						// New year
 						month = 1;
