@@ -21,7 +21,7 @@
 
 int main() {
 	short *audio;
-	char file[32] = "../assets/wwvh/phone.wav";
+	char file[32] = "../assets/phone-wwvh.wav";
 
 	SNDFILE *inf;
 	SF_INFO sfinfo;

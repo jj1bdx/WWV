@@ -39,7 +39,7 @@ int main() {
 	audio = malloc(16000*60*2 * sizeof(short));
 
 	for (int i = 0; i < 2; i++) {
-		snprintf(file, 32, "../assets/%s/mars.wav", stations[i]);
+		snprintf(file, 32, "../assets/mars-%s.wav", stations[i]);
 		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
 
 		frames = sfinfo.frames;
