@@ -373,16 +373,16 @@ static int announce_phone(int16_t *audio, int startms, int stopms) {
 // Geophysical report: WWV/H (no actual messages yet)
 static int announce_geophys(int16_t *audio, int startms, int stopms,
 	int this_hour, int this_month, int month_of_prev_day, int prev_day, int day,
-	struct geophys_data_t data) {
+	struct geophys_data_t *data) {
 	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
 		return -1;
 
 	build_geophys_announcement(this_hour,
 		month_of_prev_day, this_month,
 		prev_day, day,
-		data.solar_flux,
-		data.a_index,
-		data.k_index_int, data.k_index_dec,
+		data->solar_flux,
+		data->a_index,
+		data->k_index_int, data->k_index_dec,
 		(stopms - startms)*Samprate_ms, audio + startms*Samprate_ms);
 
 	return 0;
@@ -662,7 +662,7 @@ static void decode_timecode(unsigned char *code,int length) {
 // Insert tone or announcement into seconds 1-44
 static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minute,
 	int month_of_prev_day, int prev_day, int month, int day,
-	struct geophys_data_t geophys_data) {
+	struct geophys_data_t *geophys_data) {
 	const double tone_amp = pow(10.,-6.0/20.); // -6 dB
 
 #if 0
@@ -756,7 +756,7 @@ done:
 
 static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1,int hour,int minute,
 	int month_of_prev_day, int prev_day, int cur_month, int cur_day,
-	struct geophys_data_t data) {
+	struct geophys_data_t *data) {
 	// Amplitudes
 	// NIST 250-67, p 50
 	const double marker_high_amp = pow(10.,-6.0/20.);
@@ -770,7 +770,7 @@ static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,i
 
 	/* this is updated hourly */
 	if (minute == 15)
-		get_geophys_data(&data);
+		get_geophys_data(data);
 
 	// Build a minute of audio
 	memset(output,0,length*Samprate*sizeof(*output)); // Clear previous audio
@@ -1093,7 +1093,7 @@ int main(int argc,char *argv[]) {
 
 		// Build a minute of audio
 		makeminute(audio,length,WWVH,code,dut1,hour,minute,
-				month_of_prev_day, prev_day, month, day, geophys_data);
+				month_of_prev_day, prev_day, month, day, &geophys_data);
 
 #ifdef DIRECT
 		if (!Direct_mode) {
