@@ -18,7 +18,7 @@
 
 /* This file was generated with a helper program.
    Please do not edit by hand. */
-extern short hamsci_ann[596997];
+extern short hamsci_ann[586280];
 extern int hamsci_ann_size;
-extern short hamsci_test[606806];
+extern short hamsci_test[624297];
 extern int hamsci_test_size;

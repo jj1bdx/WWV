@@ -199,7 +199,7 @@ static int WWV_tone_schedule[60] = {
     0,600,500,600,  0,600,  0,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
   500,600,500,600,500,600,500,600,500,  0, // 29 is silent to protect wwvh id
     0,600,500,600,500,600,500,600,500,600, // 30 is station ID
-    0,600,500,  0,  0,  0,  0,  0,  0,  0, // 43-51 is silent period to protect wwvh
+  500,600,500,  0,  0,  0,  0,  0,  0,  0, // 43-51 is silent period to protect wwvh
     0,  0,  0,600,500,600,500,600,500,  0  // 59 is silent to protect wwvh id; 52 new special at wwvh, not protected by wwv
 };
 
@@ -208,7 +208,7 @@ static int WWVH_tone_schedule[60] = {
     0,  0,600,500,  0,  0,  0,  0,  0,  0, // 14-19 is silent period to protect wwv; 11 silent to protect undoc wwv
   600,500,600,500,600,500,600,500,600,  0, // 29 is station ID
     0,500,600,500,600,500,600,500,600,500, // 30 silent to protect wwv id
-    0,500,600,500,  0,  0,  0,  0,  0,  0, // 43-44 GPS (unused-tones); 45 geoalerts; 47 nist reserved; 48-51 storms
+  600,500,600,500,  0,  0,  0,  0,  0,  0, // 43-44 GPS (unused-tones); 45 geoalerts; 47 nist reserved; 48-51 storms
     0,  0,  0,500,600,500,600,500,600,  0  // 59 is station ID; 52 new special at wwvh?, NOT protected at WWV
 };
 
@@ -724,13 +724,13 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 			geophys_data);
 	/* HamSci */
 	} else if (!wwvh && minute == 4) {
-		announce_hamsci_ann(output, 2000, 45000);
+		announce_hamsci_ann(output, 3000, 45000);
 	} else if (wwvh && minute == 3) {
-		announce_hamsci_ann(output, 2000, 45000);
+		announce_hamsci_ann(output, 3000, 45000);
 	} else if (!wwvh && minute == 8) {
-		announce_hamsci(output, 2000, 45000);
-	} else if (wwvh && minute == 40) {
-		announce_hamsci(output, 2000, 45000);
+		announce_hamsci(output, 3000, 45000);
+	} else if (wwvh && minute == 48) {
+		announce_hamsci(output, 3000, 45000);
 	/* Sprint LTE and T-Mobile UMTS shutdown announcement (unofficial) */
 	} else if (!wwvh && (minute == 14 || minute == 44)) {
 		announce_3g_shutdown(output, 2000, 45000, 0);
