@@ -370,7 +370,7 @@ static int announce_phone(int16_t *audio, int startms, int stopms) {
 	return 0;
 }
 
-// Geophysical report: WWV/H (no actual messages yet)
+/* Geophysical report: WWV/H */
 static int announce_geophys(int16_t *audio, int startms, int stopms,
 	int this_hour, int this_month, int month_of_prev_day, int prev_day, int day,
 	struct geophys_data_t *data) {
@@ -388,29 +388,17 @@ static int announce_geophys(int16_t *audio, int startms, int stopms,
 	return 0;
 }
 
-/* HamSci (announcement) */
-static int announce_hamsci_ann(int16_t *audio, int startms, int stopms) {
+/* HamSci (announcement and test) */
+static int announce_hamsci(int16_t *audio, int startms, int stopms, int test) {
 	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
 		return -1;
 
 	int max_len = (stopms - startms)*Samprate_ms;
-	int samples = hamsci_ann_size;
+	int samples = test ? hamsci_test_size : hamsci_ann_size;
 	if (samples > max_len) samples = max_len;
 
-	memcpy(audio + startms*Samprate_ms, hamsci_ann, samples*sizeof(*audio));
-	return 0;
-}
-
-/* HamSci (test signal) */
-static int announce_hamsci(int16_t *audio, int startms, int stopms) {
-	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
-		return -1;
-
-	int max_len = (stopms - startms)*Samprate_ms;
-	int samples = hamsci_test_size;
-	if (samples > max_len) samples = max_len;
-
-	memcpy(audio + startms*Samprate_ms, hamsci_test, samples*sizeof(*audio));
+	memcpy(audio + startms*Samprate_ms,
+		test ? hamsci_test : hamsci_ann, samples*sizeof(*audio));
 	return 0;
 }
 
@@ -703,15 +691,18 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 	// WWV IDs at minute 0 and 30 in male voice
 	} else if (!wwvh && (minute == 0 || minute == 30)) {
 		announce_station(output,1000,45000,0);
+
 	/* DoD M.A.R.S. announcement on minute 10 */
 	} else if (!wwvh && (minute == 10)) {
 		announce_mars(output, 2000, 45000, 0);
 	/* ...and on minute 50 */
 	} else if (wwvh && (minute == 50)) {
 		announce_mars(output, 2000, 45000, 1);
+
 	/* dial-in information broadcast on WWVH only */
 	} else if (wwvh && (minute == 47 || minute == 52)) {
 		announce_phone(output,1000, 45000);
+
 	/* geophysical alerts on minute 18 */
 	} else if (!wwvh && minute == 18) {
 		announce_geophys(output, 2500, 45000,
@@ -724,18 +715,20 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 			geophys_data);
 	/* HamSci */
 	} else if (!wwvh && minute == 4) {
-		announce_hamsci_ann(output, 3000, 45000);
+		announce_hamsci(output, 3000, 45000, 0);
 	} else if (wwvh && minute == 3) {
-		announce_hamsci_ann(output, 3000, 45000);
+		announce_hamsci(output, 3000, 45000, 0);
 	} else if (!wwvh && minute == 8) {
-		announce_hamsci(output, 3000, 45000);
+		announce_hamsci(output, 3000, 45000, 1);
 	} else if (wwvh && minute == 48) {
-		announce_hamsci(output, 3000, 45000);
+		announce_hamsci(output, 3000, 45000, 1);
+
 	/* Sprint LTE and T-Mobile UMTS shutdown announcement (unofficial) */
 	} else if (!wwvh && (minute == 14 || minute == 44)) {
 		announce_3g_shutdown(output, 2000, 45000, 0);
 	} else if (wwvh && (minute == 16 || minute == 46)) {
 		announce_3g_shutdown(output, 2000, 45000, 1);
+
 	} else {
 		if (tone)
 			add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
