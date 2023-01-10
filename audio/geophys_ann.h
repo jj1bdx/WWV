@@ -18,5 +18,5 @@
 
 /* This file was generated with a helper program.
    Please do not edit by hand. */
-extern short geophys_ann[342902];
-extern int geophys_ann_sizes[9];
+extern short geophys_ann[205913];
+extern int geophys_ann_sizes[8];

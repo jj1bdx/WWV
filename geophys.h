@@ -15,4 +15,24 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-extern void build_geophys_announcement(int hour, int prev_month, int month, int prev_dom, int dom, int solar_flux, int a_index, int k_index_int, int k_index_dec, int len, short *voice);
+
+typedef struct geophys_data_t {
+	uint16_t solar_flux;
+	uint8_t a_index;
+	/* decimal parts */
+	uint16_t k_index_int;
+	uint16_t k_index_dec;
+
+	uint8_t obs_space_wx;
+	uint8_t obs_srs;
+	uint8_t obs_radio_blackout;
+
+	uint8_t pred_space_wx;
+	uint8_t pred_srs;
+	uint8_t pred_radio_blackout;
+} geophys_data_t;
+
+extern void build_geophys_announcement(
+	int hour, int prev_month, int month, int prev_day, int day,
+	struct geophys_data_t *data,
+	int len, short *voice);

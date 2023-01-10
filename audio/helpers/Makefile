@@ -3,7 +3,7 @@ CFLAGS = -O2 -Wall -Wextra -pedantic -lsndfile -s
 
 all: helpers
 
-helpers: ann id mars nums phone hamsci 3g-shutdown geophys_ann geophys_months geophys_nums
+helpers: ann id mars nums phone hamsci 3g-shutdown geophys_ann geophys_months geophys_nums geophys_storms
 
 audio-src:
 	./create-audio-data.sh
@@ -38,5 +38,8 @@ geophys_months: geophys_months.c
 geophys_nums: geophys_nums.c
 	 $(CC) -o geophys_nums $< $(CFLAGS)
 
+geophys_storms: geophys_storms.c
+	$(CC) -o geophys_storms $< $(CFLAGS)
+
 clean:
-	rm -f ann id mars nums phone hamsci 3g-shutdown geophys_ann geophys_months geophys_nums
+	rm -f ann id mars nums phone hamsci 3g-shutdown geophys_ann geophys_months geophys_nums geophys_storms

@@ -9,3 +9,4 @@
 ./geophys_ann	> ../geophys_ann.c	2> ../geophys_ann.h
 ./geophys_months	>	../geophys_months.c	2> ../geophys_months.h
 ./geophys_nums	>	../geophys_nums.c	2> ../geophys_nums.h
+./geophys_storms	>	../geophys_storms.c	2> ../geophys_storms.h

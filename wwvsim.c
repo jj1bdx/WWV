@@ -138,28 +138,31 @@ static void wait_for_start() {
 }
 
 /* obtain geophysical data via a text file */
-typedef struct geophys_data_t {
-	uint16_t solar_flux;
-	uint8_t a_index;
-	uint16_t k_index_int;
-	uint16_t k_index_dec;
-} geophys_data_t;
-
 static void get_geophys_data(geophys_data_t *data) {
 	int fd;
-	char buf[16];
+	char buf[32];
 
-	memset(buf, 0, 16);
+	memset(buf, 0, 32);
 	fd = open("/tmp/wwv-geophys.data", O_RDONLY);
 	if (fd < 0) return;
 
-	read(fd, buf, 16-1);
+	read(fd, buf, 32-1);
 	close(fd);
 
 	memset(data, 0, sizeof(struct geophys_data_t));
 
-	sscanf(buf, "%hu,%hhu,%hu.%hu", &data->solar_flux, &data->a_index,
-		&data->k_index_int, &data->k_index_dec);
+	sscanf(buf, "%hu,%hhu,%hu.%hu,%hhu,%hhu,%hhu,%hhu,%hhu,%hhu",
+		&data->solar_flux,
+		&data->a_index,
+		&data->k_index_int,
+		&data->k_index_dec,
+		&data->obs_space_wx,
+		&data->obs_srs,
+		&data->obs_radio_blackout,
+		&data->pred_space_wx,
+		&data->pred_srs,
+		&data->pred_radio_blackout
+	);
 }
 
 #if 0
@@ -377,13 +380,13 @@ static int announce_geophys(int16_t *audio, int startms, int stopms,
 	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
 		return -1;
 
-	build_geophys_announcement(this_hour,
+	build_geophys_announcement(
+		this_hour,
 		month_of_prev_day, this_month,
 		prev_day, day,
-		data->solar_flux,
-		data->a_index,
-		data->k_index_int, data->k_index_dec,
-		(stopms - startms)*Samprate_ms, audio + startms*Samprate_ms);
+		data,
+		(stopms - startms)*Samprate_ms, audio + startms*Samprate_ms
+	);
 
 	return 0;
 }

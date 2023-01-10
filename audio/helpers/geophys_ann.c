@@ -21,7 +21,7 @@
 
 int main() {
 	/* lengths */
-	int sizes[9];
+	int sizes[8];
 
 	short *audio;
 	char file[64];
@@ -34,8 +34,7 @@ int main() {
 		"the_estimated_planetary_k_index_at",
 		"utc_on",
 		"was",
-		"point",
-		"no_space"
+		"point"
 	};
 
 	SNDFILE *inf;
@@ -46,11 +45,11 @@ int main() {
 
 	int newline;
 
-	audio = malloc(16000*10*9 * sizeof(short));
+	audio = malloc(16000*10*8 * sizeof(short));
 
 	total_frames = 0;
 
-	for (int i = 0; i < 9; i++) {
+	for (int i = 0; i < 8; i++) {
 		snprintf(file, 64, "../assets/geophys/%s.wav", ann[i]);
 		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
 
@@ -80,9 +79,9 @@ int main() {
 	}
 	printf("};\n");
 
-	printf("int geophys_ann_sizes[%d] = {\n", 9);
-	for (int i = 0; i < 9; i++) {
-		if (i == 9 - 1) {
+	printf("int geophys_ann_sizes[%d] = {\n", 8);
+	for (int i = 0; i < 8; i++) {
+		if (i == 8 - 1) {
 			printf("%6d\n", sizes[i]);
 		} else {
 			printf("%6d,", sizes[i]);
@@ -92,7 +91,7 @@ int main() {
 
 	fprintf(stderr, HEADER);
 	fprintf(stderr, "extern short geophys_ann[%d];\n", total_frames);
-	fprintf(stderr, "extern int geophys_ann_sizes[%d];\n", 9);
+	fprintf(stderr, "extern int geophys_ann_sizes[%d];\n", 8);
 
 	free(audio);
 
