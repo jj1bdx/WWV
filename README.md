@@ -26,3 +26,14 @@ your computer's audio system. It also relies on the accuracy of your computer's 
 by the Network Time Protocol. So this program is really a novelty; don't use it for anything really precise. That's
 what the original WWV and WWVH are for!
 
+## Build
+Just run make -j4. It will take a while for the pre-generated voice data to be compiled in.
+
+## Hourly program details
+In addition to the time and station ID, there are other announcments made throughout every hour.
+- HamSCI announcement on minute 3 on WWVH and minute 4 of WWV
+- HamSCI test signal on minute 8 on WWV and minute 48 of WWVH
+- DoD M.A.R.S. announcements on minute 10 of WWV and minute 50 on WWVH
+- (custom) 3G shutdown announcement on minutes 14 & 44 on WWV and 16 & 16 on WWVH (will be used for future program or removed completely)
+- Geophysical alerts on minute 18 of WWV and minute 45 on WWVH
+- Telephone availability for WWVH on minutes 47 & 52
