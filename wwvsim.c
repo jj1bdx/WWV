@@ -38,7 +38,9 @@
 #include <stdint.h>
 #include <getopt.h>
 #include <pthread.h>
+#if 0 /* not yet */
 #include <samplerate.h>
+#endif
 
 #ifdef DIRECT
 #include <portaudio.h>
@@ -208,7 +210,7 @@ static int Days_in_month[] = { // Index 1 = January, 12 = December
 // Special exception: no 440 Hz tone in first hour of UTC day; must be handled ad-hoc
 static int WWV_tone_schedule[60] = {
     0,600,440,  0,  0,600,500,600,  0,600, // 3 is nist reserved at wwvh, 4 reserved at wwv; 8-10 storms; 7 undoc wwv
-    0,600,500,600,  0,600,  0,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
+    0,600,500,600,500,600,500,600,  0,600, // 14-15 GPS (no longer used - tones), 16 nist reserved, 18 geoalerts; 11 undoc wwv
   500,600,500,600,500,600,500,600,500,  0, // 29 is silent to protect wwvh id
     0,600,500,600,500,600,500,600,500,600, // 30 is station ID
   500,600,500,  0,  0,  0,  0,  0,  0,  0, // 43-51 is silent period to protect wwvh
@@ -217,10 +219,10 @@ static int WWV_tone_schedule[60] = {
 
 static int WWVH_tone_schedule[60] = {
     0,440,600,  0,  0,500,600,500,  0,  0, // 0 silent to protect wwv id; 3 nist reserved; 4 reserved at wwv; 7 protects undoc wwv; 8-10 protects storms at wwv
-    0,  0,600,500,  0,  0,  0,  0,  0,  0, // 14-19 is silent period to protect wwv; 11 silent to protect undoc wwv
+    0,500,600,500,  0,  0,  0,  0,  0,  0, // 14-19 is silent period to protect wwv; 11 silent to protect undoc wwv
   600,500,600,500,600,500,600,500,600,  0, // 29 is station ID
     0,500,600,500,600,500,600,500,600,500, // 30 silent to protect wwv id
-  600,500,600,500,  0,  0,  0,  0,  0,  0, // 43-44 GPS (unused-tones); 45 geoalerts; 47 nist reserved; 48-51 storms
+  600,500,600,500,600,  0,600,  0,  0,  0, // 43-44 GPS (unused-tones); 45 geoalerts; 47 nist reserved; 48-51 storms
     0,  0,  0,500,600,500,600,500,600,  0  // 59 is station ID; 52 new special at wwvh?, NOT protected at WWV
 };
 
@@ -355,6 +357,7 @@ static int announce_station(int16_t *audio, int startms, int stopms, int wwvh) {
 	return 0;
 }
 
+#if 0
 // DoD M.A.R.S. (no actual messages yet)
 static int announce_mars(int16_t *audio, int startms, int stopms, int wwvh) {
 	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
@@ -368,6 +371,7 @@ static int announce_mars(int16_t *audio, int startms, int stopms, int wwvh) {
 	memcpy(audio + startms*Samprate_ms, this_mars_ann, samples*sizeof(*audio));
 	return 0;
 }
+#endif
 
 // WWVH only: announce WWVH broadcast availability over the phone
 static int announce_phone(int16_t *audio, int startms, int stopms) {
@@ -401,19 +405,21 @@ static int announce_geophys(int16_t *audio, int startms, int stopms,
 }
 
 /* HamSci (announcement and test) */
-static int announce_hamsci(int16_t *audio, int startms, int stopms, int test) {
+static int announce_hamsci(int16_t *audio, int startms, int stopms, int wwvh, int test) {
 	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
 		return -1;
 
 	int max_len = (stopms - startms)*Samprate_ms;
-	int samples = test ? hamsci_test_size : hamsci_ann_size;
+	int ann_offset = wwvh ? hamsci_ann_sizes[0] : 0;
+	int samples = test ? hamsci_test_size : hamsci_ann_sizes[wwvh];
 	if (samples > max_len) samples = max_len;
 
 	memcpy(audio + startms*Samprate_ms,
-		test ? hamsci_test : hamsci_ann, samples*sizeof(*audio));
+		test ? hamsci_test : hamsci_ann + ann_offset, samples*sizeof(*audio));
 	return 0;
 }
 
+#if 0
 /* Sprint LTE and T-Mobile UMTS shutdown announcement: WWV/H */
 static int announce_3g_shutdown(int16_t *audio, int startms, int stopms, int wwvh) {
 	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
@@ -427,6 +433,7 @@ static int announce_3g_shutdown(int16_t *audio, int startms, int stopms, int wwv
 	memcpy(audio + startms*Samprate_ms, this_3g_ann, samples*sizeof(*audio));
 	return 0;
 }
+#endif
 
 // Overlay a tone with frequency 'freq' in audio buffer, overwriting whatever was there
 // starting at 'startms' within the minute and stopping one sample before 'stopms'.
@@ -704,12 +711,14 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 	} else if (!wwvh && (minute == 0 || minute == 30)) {
 		announce_station(output,1000,45000,0);
 
+#if 0 /* no broadcasts? */
 	/* DoD M.A.R.S. announcement on minute 10 */
 	} else if (!wwvh && (minute == 10)) {
 		announce_mars(output, 2000, 45000, 0);
 	/* ...and on minute 50 */
 	} else if (wwvh && (minute == 50)) {
 		announce_mars(output, 2000, 45000, 1);
+#endif
 
 	/* dial-in information broadcast on WWVH only */
 	} else if (wwvh && (minute == 47 || minute == 52)) {
@@ -727,19 +736,21 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 			geophys_data);
 	/* HamSci */
 	} else if (!wwvh && minute == 4) {
-		announce_hamsci(output, 3000, 45000, 0);
+		announce_hamsci(output, 3000, 45000, 0, 0);
 	} else if (wwvh && minute == 3) {
-		announce_hamsci(output, 3000, 45000, 0);
+		announce_hamsci(output, 3000, 45000, 1, 0);
 	} else if (!wwvh && minute == 8) {
-		announce_hamsci(output, 3000, 45000, 1);
+		announce_hamsci(output, 1000, 45000, 0, 1);
 	} else if (wwvh && minute == 48) {
-		announce_hamsci(output, 3000, 45000, 1);
+		announce_hamsci(output, 1000, 45000, 1, 1);
 
+#if 0 /* will be removed soon */
 	/* Sprint LTE and T-Mobile UMTS shutdown announcement (unofficial) */
 	} else if (!wwvh && (minute == 14 || minute == 44)) {
 		announce_3g_shutdown(output, 2000, 45000, 0);
 	} else if (wwvh && (minute == 16 || minute == 46)) {
 		announce_3g_shutdown(output, 2000, 45000, 1);
+#endif
 
 	} else {
 		if (tone)

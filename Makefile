@@ -5,7 +5,7 @@ all: wwvsim
 
 wwvsim: wwvsim.o voice.o geophys.o audio/*.c
 	$(MAKE) -C audio
-	$(CC) -o $@ wwvsim.o voice.o geophys.o audio/audio.a -lm -lsamplerate -s -pthread
+	$(CC) -o $@ wwvsim.o voice.o geophys.o audio/audio.a -lm -s -pthread
 
 clean:
 	$(MAKE) -C audio clean

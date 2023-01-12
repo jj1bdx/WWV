@@ -74,7 +74,8 @@ void build_time_announcement(int hour, int minute, int h, int len, short *voice)
 	time_ann_offset += time_ann_sizes[1];
 	samples += time_ann_sizes[1];
 
-	samples += 100*25;
+	/* add pause (WWV only) */
+	if (!h) samples += 100*25;
 
 	// # of minutes
 	number_offset = 0;
@@ -94,8 +95,8 @@ void build_time_announcement(int hour, int minute, int h, int len, short *voice)
 	time_ann_offset += time_ann_sizes[2];
 	samples += time_ann_sizes[2];
 
-	// add pause
-	samples += 100*50;
+	// add pause (WWV only)
+	if (!h) samples += 100*100;
 
 	// coordinated universal time
 	memcpy(out_buffer+samples, time_ann+time_ann_offset, time_ann_sizes[3]*sizeof(*voice));
