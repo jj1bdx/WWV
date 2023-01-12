@@ -129,6 +129,9 @@ void build_geophys_announcement(int hour,
 	}
 	samples += number_len;
 
+	/* pause */
+	samples += 100*100;
+
 	/* "the estimated planetary K-index at" */
 	memcpy(out_buffer + samples,
 		geophys_ann + ann_offset,
@@ -248,6 +251,24 @@ void build_geophys_announcement(int hour,
 			samples += number_len;
 		}
 
+		/* observed solar radiation storms */
+		if (data->obs_srs) {
+			offset = 0;
+			for (int i = 0; i < 5 + 1; i++) {
+				if (i + 1 == data->obs_srs) {
+					number_len =
+						geophys_obs_srs_sizes[i];
+					memcpy(out_buffer + samples,
+						geophys_obs_srs + offset,
+						number_len * sizeof(*voice));
+					break;
+				}
+				/* continue stepping through the data */
+				offset += geophys_obs_srs_sizes[i];
+			}
+			samples += number_len;
+		}
+
 		/* observed radio blackout */
 		if (data->obs_radio_blackout) {
 			offset = 0;
@@ -265,7 +286,7 @@ void build_geophys_announcement(int hour,
 			samples += number_len;
 		}
 	} else {
-		/* "no space weather storms were observed
+		/* "No space weather storms were observed
 		 * for the past 24 hours."
 		 */
 		memcpy(out_buffer + samples,
@@ -273,7 +294,6 @@ void build_geophys_announcement(int hour,
 			geophys_no_storms_sizes[0] * sizeof(*voice));
 		samples += geophys_no_storms_sizes[0];
 	}
-	ann_offset += geophys_no_storms_sizes[8];
 
 	if (data->pred_space_wx || data->pred_srs || data->pred_radio_blackout)
 	{
@@ -295,6 +315,24 @@ void build_geophys_announcement(int hour,
 			samples += number_len;
 		}
 
+		/* predicted solar radiation storms */
+		if (data->pred_srs) {
+			offset = 0;
+			for (int i = 0; i < 15 + 1; i++) {
+				if (i + 1 == data->pred_srs) {
+					number_len =
+						geophys_pred_srs_sizes[i];
+					memcpy(out_buffer + samples,
+						geophys_pred_srs + offset,
+						number_len * sizeof(*voice));
+					break;
+				}
+				/* continue stepping through the data */
+				offset += geophys_pred_srs_sizes[i];
+			}
+			samples += number_len;
+		}
+
 		/* predicted radio blackout */
 		if (data->pred_radio_blackout) {
 			offset = 0;
@@ -312,7 +350,7 @@ void build_geophys_announcement(int hour,
 			samples += number_len;
 		}
 	} else {
-		/* "no space weather storms are predicted
+		/* "No space weather storms are predicted
 		 * for the next 24 hours."
 		 */
 		memcpy(out_buffer + samples,
@@ -320,7 +358,6 @@ void build_geophys_announcement(int hour,
 			geophys_no_storms_sizes[1] * sizeof(*voice));
 		samples += geophys_no_storms_sizes[1];
 	}
-	ann_offset += geophys_no_storms_sizes[1];
 
 	if (samples > len) samples = len;
 

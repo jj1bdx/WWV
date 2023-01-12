@@ -33,7 +33,7 @@ int main() {
 	audio = malloc(16000*60*2 * sizeof(short));
 
 	snprintf(file, 32, "../assets/hamsci_ann.wav");
-	if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
+	if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
 
 	frames[0] = sfinfo.frames;
 
@@ -57,7 +57,7 @@ int main() {
 	printf("int hamsci_ann_size = %d;\n", frames[0]);
 
 	snprintf(file, 32, "../assets/hamsci_test.wav");
-	if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
+	if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
 
 	frames[1] = sfinfo.frames;
 
@@ -85,6 +85,7 @@ int main() {
 	fprintf(stderr, "extern short hamsci_test[%d];\n", frames[1]);
 	fprintf(stderr, "extern int hamsci_test_size;\n");
 
+exit:
 	free(audio);
 
 	return 0;

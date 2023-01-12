@@ -137,20 +137,29 @@ static void wait_for_start() {
 	}
 }
 
+#define GEO_DATA_PATH	"/tmp/wwv-geophys.data"
+#define GEO_DATA_SIZE	32
+
 /* obtain geophysical data via a text file */
 static void get_geophys_data(geophys_data_t *data) {
 	int fd;
-	char buf[32];
+	static char buf[GEO_DATA_SIZE];
 
-	memset(buf, 0, 32);
-	fd = open("/tmp/wwv-geophys.data", O_RDONLY);
-	if (fd < 0) return;
+	memset(buf, 0, GEO_DATA_SIZE);
 
-	read(fd, buf, 32-1);
-	close(fd);
-
+	/*
+	 * clear the data here so if parsing fails for some reason we're not
+	 * broadcasting old data
+	 */
 	memset(data, 0, sizeof(struct geophys_data_t));
 
+	fd = open(GEO_DATA_PATH, O_RDONLY);
+	if (fd < 0) return;
+
+	read(fd, buf, GEO_DATA_SIZE - 1);
+	close(fd);
+
+	/* parse the file for the data */
 	sscanf(buf, "%hu,%hhu,%hu.%hu,%hhu,%hhu,%hhu,%hhu,%hhu,%hhu",
 		&data->solar_flux,
 		&data->a_index,

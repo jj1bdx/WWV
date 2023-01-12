@@ -28,7 +28,7 @@ extern short geophys_pred_rb[561071];
 extern int geophys_pred_rb_sizes[10];
 extern short geophys_pred_space_wx[343156];
 extern int geophys_pred_space_wx_sizes[5];
-extern short geophys_pred_srs[642156];
+extern short geophys_pred_srs[1023802];
 extern int geophys_pred_srs_sizes[10];
 extern short geophys_no_storms[136307];
 extern int geophys_no_storms_sizes[2];

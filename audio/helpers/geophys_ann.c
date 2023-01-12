@@ -51,7 +51,7 @@ int main() {
 
 	for (int i = 0; i < 8; i++) {
 		snprintf(file, 64, "../assets/geophys/%s.wav", ann[i]);
-		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
+		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
 
 		frames = sfinfo.frames;
 		sizes[i] = frames;
@@ -93,6 +93,7 @@ int main() {
 	fprintf(stderr, "extern short geophys_ann[%d];\n", total_frames);
 	fprintf(stderr, "extern int geophys_ann_sizes[%d];\n", 8);
 
+exit:
 	free(audio);
 
 	return 0;

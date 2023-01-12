@@ -47,7 +47,7 @@ int main() {
 
 		for (int j = 0; j < 4; j++) {
 			snprintf(file, 32, "../assets/%s/%s.wav", stations[i], ann[j]);
-			if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
+			if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
 
 			frames = sfinfo.frames;
 			sizes[j] = frames;
@@ -87,6 +87,7 @@ int main() {
 		fprintf(stderr, "extern int %s_time_ann_sizes[%d];\n", stations[i], 4);
 	}
 
+exit:
 	free(audio);
 
 	return 0;

@@ -40,7 +40,7 @@ int main() {
 
 	for (int i = 0; i < 2; i++) {
 		snprintf(file, 32, "../assets/mars-%s.wav", stations[i]);
-		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
+		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
 
 		frames = sfinfo.frames;
 		sizes[i] = frames;
@@ -80,6 +80,7 @@ int main() {
 	fprintf(stderr, "extern short mars_ann[%d];\n", total_frames);
 	fprintf(stderr, "extern int mars_ann_sizes[2];\n");
 
+exit:
 	free(audio);
 
 	return 0;

@@ -29,7 +29,7 @@ int main() {
 
 	char *times[] = {"obs", "pred"};
 	char *events[] = {"rb", "space_wx", "srs"};
-	char *prob[] = {"likely", "expected"};
+	char *prob[] = {"likely", "expected", "expected_to_cont"};
 	char *levels[] = {"minor", "moderate", "strong", "severe", "extreme"};
 	char *no_storms[] = {"no_past_storms", "no_future_storms"};
 
@@ -60,7 +60,7 @@ int main() {
 				for (int k = 0; k < 5; k++) {
 					snprintf(file, 64, "../assets/geophys/%s_%s_r%d_%s.wav",
 					times[i], events[0], k + 1, prob[j]);
-					if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
+					if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
 
 					frames = sfinfo.frames;
 					sizes[m] = frames;
@@ -76,7 +76,7 @@ int main() {
 			for (int j = 0; j < 5; j++) {
 				snprintf(file, 64, "../assets/geophys/%s_%s_r%d.wav",
 				times[i], events[0], j + 1);
-				if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
+				if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
 
 				frames = sfinfo.frames;
 				sizes[j] = frames;
@@ -128,7 +128,7 @@ int main() {
 		for (int j = 0; j < 5; j++) {
 			snprintf(file, 64, "../assets/geophys/%s_%s_%s.wav",
 				times[i], events[1], levels[j]);
-			if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
+			if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
 			frames = sfinfo.frames;
 			sizes[j] = frames;
 
@@ -176,18 +176,39 @@ int main() {
 		/* solar radiation storms */
 		int m = 0;
 		sizes_counter = 10;
-		for (int j = 0; j < 2; j++) {
-			for (int k = 0; k < 5; k++) {
-				snprintf(file, 64, "../assets/geophys/%s_%s_s%d_%s.wav",
-				times[i], events[2], k + 1, prob[j]);
-				if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
-				frames = sfinfo.frames;
-				sizes[m] = frames;
+		if (i == 1) {
+			sizes_counter = 15;
+			for (int j = 0; j < 3; j++) {
+				for (int k = 0; k < 5; k++) {
+					snprintf(file, 64, "../assets/geophys/%s_%s_s%d_%s.wav",
+					times[i], events[2], k + 1, prob[j]);
+					if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
 
-				sf_read_short(inf, audio+total_frames, frames);
-				sf_close(inf);
-				total_frames += frames;
-				m++;
+					frames = sfinfo.frames;
+					sizes[m] = frames;
+
+					sf_read_short(inf, audio+total_frames, frames);
+					sf_close(inf);
+
+					total_frames += frames;
+					m++;
+				}
+			}
+		} else {
+			for (int j = 0; j < 2; j++) {
+				for (int k = 0; k < 5; k++) {
+					snprintf(file, 64, "../assets/geophys/%s_%s_s%d_%s.wav",
+					times[i], events[2], k + 1, prob[j]);
+					if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
+
+					frames = sfinfo.frames;
+					sizes[m] = frames;
+
+					sf_read_short(inf, audio+total_frames, frames);
+					sf_close(inf);
+					total_frames += frames;
+					m++;
+				}
 			}
 		}
 
@@ -227,7 +248,7 @@ int main() {
 
 	for (int i = 0; i < 2; i++) {
 		snprintf(file, 64, "../assets/geophys/%s.wav", no_storms[i]);
-		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) return 1;
+		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
 
 		frames = sfinfo.frames;
 		sizes[i] = frames;
@@ -267,6 +288,7 @@ int main() {
 	fprintf(stderr, "extern short geophys_no_storms[%d];\n", total_frames);
 	fprintf(stderr, "extern int geophys_no_storms_sizes[%d];\n", 2);
 
+exit:
 	free(audio);
 
 	return 0;
