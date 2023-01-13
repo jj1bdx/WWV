@@ -38,9 +38,6 @@
 #include <stdint.h>
 #include <getopt.h>
 #include <pthread.h>
-#if 0 /* not yet */
-#include <samplerate.h>
-#endif
 
 #ifdef DIRECT
 #include <portaudio.h>
@@ -134,8 +131,8 @@ static void wait_for_start() {
 
 		if (utc->tm_sec == 0) break;
 
-		/* wait 10 ms before polling again */
-		msleep(10);
+		/* wait 1 ms before polling again */
+		msleep(1);
 	}
 }
 
@@ -175,17 +172,6 @@ static void get_geophys_data(geophys_data_t *data) {
 		&data->pred_radio_blackout
 	);
 }
-
-#if 0
-static void *output_thread(void *arg) {
-}
-
-static void *clock_thread(void *arg) {
-}
-
-static void *sync_thread(void *arg) {
-}
-#endif
 
 // Is specified year a leap year?
 static int is_leap_year(int y) {
@@ -696,6 +682,13 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 		if (tone)
 			add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
 	}
+
+done:
+	if (rawfilename)
+		free(rawfilename);
+
+	if (textfilename)
+		free(textfilename);
 #else
 	// Continuous tone (or silence) from start of second 1 through end of second 44
 	int tone = wwvh ? WWVH_tone_schedule[minute] : WWV_tone_schedule[minute];
@@ -734,11 +727,12 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 		announce_geophys(output, 2500, 45000,
 			hour, month, month_of_prev_day, prev_day, day,
 			geophys_data);
+
 	/* HamSci */
 	} else if (!wwvh && minute == 4) {
-		announce_hamsci(output, 3000, 45000, 0, 0);
+		announce_hamsci(output, 1000, 45000, 0, 0);
 	} else if (wwvh && minute == 3) {
-		announce_hamsci(output, 3000, 45000, 1, 0);
+		announce_hamsci(output, 1000, 45000, 1, 0);
 	} else if (!wwvh && minute == 8) {
 		announce_hamsci(output, 1000, 45000, 0, 1);
 	} else if (wwvh && minute == 48) {
@@ -756,15 +750,6 @@ static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minut
 		if (tone)
 			add_tone(output,1000,45000,tone,tone_amp); // Continuous tone from 1 sec until 45 sec
 	}
-#endif
-
-#if 0
-done:
-	if (rawfilename)
-		free(rawfilename);
-
-	if (textfilename)
-		free(textfilename);
 #endif
 }
 
@@ -905,13 +890,14 @@ static int pa_callback(const void *inputBuffer, void *outputBuffer,
 
 #endif
 
-
 int main(int argc,char *argv[]) {
 	int c;
 	int year,month,day,hour,minute;
 	int year_of_previous_month, month_of_prev_day, prev_day;
 	int dut1 = 0;
 	int manual_time = 0;
+	int sample_offset = 0;
+	struct timeval tv1, tv2;
 #ifdef DIRECT
 	double fsec;
 	int devnum = -1;
@@ -1117,12 +1103,27 @@ int main(int argc,char *argv[]) {
 			if (!manual_time) {
 				manual_time = 1; // do this only first time
 			}
+
+			/* take a time reading */
+			gettimeofday(&tv1, NULL);
+
 			// Write the constructed buffer, minus startup delay plus however many seconds
 			// have already elapsed since the minute. This happens only at startup;
 			// on all subsequent minutes the entire buffer will be written
-			for (int i = 0; i < length; i++) {
-				fwrite(audio + Samprate * i, sizeof(*audio), Samprate, stdout);
-			}
+			fwrite(audio + sample_offset,
+				sizeof(*audio),
+				Samprate * length - sample_offset,
+				stdout);
+
+			/* now find out how long it took to play the audio */
+			gettimeofday(&tv2, NULL);
+
+			/*
+			 * get the number of samples that should be skipped so the simulator
+			 * stays in sync
+			 */
+			sample_offset = (((tv2.tv_usec - tv1.tv_usec) / 1000) * Samprate_ms) / 1000;
+			if (sample_offset < 0) sample_offset = 0;
 
 #ifdef DIRECT
 		} else {

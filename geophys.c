@@ -21,7 +21,10 @@
 
 #include "audio/geophys_ann.h"
 #include "audio/geophys_months.h"
-#include "audio/geophys_nums.h"
+#include "audio/geophys_nums_0.h"
+#include "audio/geophys_nums_1.h"
+#include "audio/geophys_nums_2.h"
+#include "audio/geophys_nums_3.h"
 #include "audio/geophys_storms.h"
 #include "geophys.h"
 
@@ -51,21 +54,21 @@ void build_geophys_announcement(int hour,
 
 	/* yesterday's day of month */
 	offset = 0;
-	for (int i = 0; i < 31 + 1; i++) {
+	for (int i = 0; i <= 31; i++) {
 		if (i == prev_day) {
-			number_len = geophys_nums_sizes[i];
-			memcpy(out_buffer + samples, geophys_nums + offset,
+			number_len = geophys_nums_0_99_sizes[i];
+			memcpy(out_buffer + samples, geophys_nums_0_99 + offset,
 				number_len * sizeof(*voice));
 			break;
 		}
 		/* continue stepping through the data */
-		offset += geophys_nums_sizes[i];
+		offset += geophys_nums_0_99_sizes[i];
 	}
 	samples += number_len;
 
 	/* the month of yesterday */
 	offset = 0;
-	for (int i = 0; i < 12 + 1; i++) {
+	for (int i = 0; i <= 12; i++) {
 		if (i == month_of_prev_day) {
 			number_len = geophys_months_sizes[i - 1];
 			memcpy(out_buffer + samples, geophys_months + offset,
@@ -96,15 +99,57 @@ void build_geophys_announcement(int hour,
 
 	/* current solar flux */
 	offset = 0;
-	for (int i = 0; i < 200; i++) {
-		if (i == data->solar_flux) {
-			number_len = geophys_nums_sizes[i];
-			memcpy(out_buffer + samples, geophys_nums + offset,
-				number_len * sizeof(*voice));
-			break;
+	if (data->solar_flux >= 100 && data->solar_flux <= 199) {
+		data->solar_flux -= 100;
+		for (int i = 0; i < 100; i++) {
+			if (i == data->solar_flux) {
+				number_len = geophys_nums_100_199_sizes[i];
+				memcpy(out_buffer + samples,
+					geophys_nums_100_199 + offset,
+					number_len * sizeof(*voice));
+				break;
+			}
+			/* continue stepping through the data */
+			offset += geophys_nums_100_199_sizes[i];
 		}
-		/* continue stepping through the data */
-		offset += geophys_nums_sizes[i];
+	} else if (data->solar_flux >= 200 && data->solar_flux <= 299) {
+		data->solar_flux -= 200;
+		for (int i = 0; i < 100; i++) {
+			if (i == data->solar_flux) {
+				number_len = geophys_nums_200_299_sizes[i];
+				memcpy(out_buffer + samples,
+					geophys_nums_200_299 + offset,
+					number_len * sizeof(*voice));
+				break;
+			}
+			/* continue stepping through the data */
+			offset += geophys_nums_200_299_sizes[i];
+		}
+	} else if (data->solar_flux >= 300 && data->solar_flux <= 399) {
+		data->solar_flux -= 300;
+		for (int i = 0; i < 100; i++) {
+			if (i == data->solar_flux) {
+				number_len = geophys_nums_300_399_sizes[i];
+				memcpy(out_buffer + samples,
+					geophys_nums_300_399 + offset,
+				number_len * sizeof(*voice));
+				break;
+			}
+			/* continue stepping through the data */
+			offset += geophys_nums_300_399_sizes[i];
+		}
+	} else { /* < 100 */
+		for (int i = 0; i < 100; i++) {
+			if (i == data->solar_flux) {
+				number_len = geophys_nums_0_99_sizes[i];
+				memcpy(out_buffer + samples,
+					geophys_nums_0_99 + offset,
+				number_len * sizeof(*voice));
+				break;
+			}
+			/* continue stepping through the data */
+			offset += geophys_nums_0_99_sizes[i];
+		}
 	}
 	samples += number_len;
 
@@ -117,15 +162,15 @@ void build_geophys_announcement(int hour,
 
 	/* current A-index */
 	offset = 0;
-	for (int i = 0; i < 200; i++) {
+	for (int i = 0; i < 100; i++) {
 		if (i == data->a_index) {
-			number_len = geophys_nums_sizes[i];
-			memcpy(out_buffer + samples, geophys_nums + offset,
+			number_len = geophys_nums_0_99_sizes[i];
+			memcpy(out_buffer + samples, geophys_nums_0_99 + offset,
 				number_len * sizeof(*voice));
 			break;
 		}
 		/* continue stepping through the data */
-		offset += geophys_nums_sizes[i];
+		offset += geophys_nums_0_99_sizes[i];
 	}
 	samples += number_len;
 
@@ -143,13 +188,13 @@ void build_geophys_announcement(int hour,
 	offset = 0;
 	for (int i = 0; i < 24; i++) {
 		if (i == hour) {
-			number_len = geophys_nums_sizes[i];
-			memcpy(out_buffer + samples, geophys_nums + offset,
+			number_len = geophys_nums_0_99_sizes[i];
+			memcpy(out_buffer + samples, geophys_nums_0_99 + offset,
 				number_len * sizeof(*voice));
 			break;
 		}
 		/* continue stepping through the data */
-		offset += geophys_nums_sizes[i];
+		offset += geophys_nums_0_99_sizes[i];
 	}
 	samples += number_len;
 
@@ -162,21 +207,21 @@ void build_geophys_announcement(int hour,
 
 	/* today's day */
 	offset = 0;
-	for (int i = 0; i < 31 + 1; i++) {
+	for (int i = 0; i <= 31; i++) {
 		if (i == day) {
-			number_len = geophys_nums_sizes[i];
-			memcpy(out_buffer + samples, geophys_nums + offset,
+			number_len = geophys_nums_0_99_sizes[i];
+			memcpy(out_buffer + samples, geophys_nums_0_99 + offset,
 				number_len * sizeof(*voice));
 			break;
 		}
 		/* continue stepping through the data */
-		offset += geophys_nums_sizes[i];
+		offset += geophys_nums_0_99_sizes[i];
 	}
 	samples += number_len;
 
 	/* today's month */
 	offset = 0;
-	for (int i = 0; i < 12 + 1; i++) {
+	for (int i = 0; i <= 12; i++) {
 		if (i == month) {
 			number_len = geophys_months_sizes[i - 1];
 			memcpy(out_buffer + samples, geophys_months + offset,
@@ -199,13 +244,13 @@ void build_geophys_announcement(int hour,
 	offset = 0;
 	for (int i = 0; i < 10; i++) {
 		if (i == data->k_index_int) {
-			number_len = geophys_nums_sizes[i];
-			memcpy(out_buffer + samples, geophys_nums + offset,
+			number_len = geophys_nums_0_99_sizes[i];
+			memcpy(out_buffer + samples, geophys_nums_0_99 + offset,
 				number_len * sizeof(*voice));
 			break;
 		}
 		/* continue stepping through the data */
-		offset += geophys_nums_sizes[i];
+		offset += geophys_nums_0_99_sizes[i];
 	}
 	samples += number_len;
 
@@ -219,13 +264,13 @@ void build_geophys_announcement(int hour,
 	offset = 0;
 	for (int i = 0; i < 100; i++) {
 		if (i == data->k_index_dec) {
-			number_len = geophys_nums_sizes[i];
-			memcpy(out_buffer + samples, geophys_nums + offset,
+			number_len = geophys_nums_0_99_sizes[i];
+			memcpy(out_buffer + samples, geophys_nums_0_99 + offset,
 				number_len * sizeof(*voice));
 			break;
 		}
 		/* continue stepping through the data */
-		offset += geophys_nums_sizes[i];
+		offset += geophys_nums_0_99_sizes[i];
 	}
 	samples += number_len;
 
@@ -236,7 +281,7 @@ void build_geophys_announcement(int hour,
 		/* observed space weather */
 		if (data->obs_space_wx) {
 			offset = 0;
-			for (int i = 0; i < 5 + 1; i++) {
+			for (int i = 0; i <= 5; i++) {
 				if (i + 1 == data->obs_space_wx) {
 					number_len =
 						geophys_obs_space_wx_sizes[i];
@@ -254,7 +299,7 @@ void build_geophys_announcement(int hour,
 		/* observed solar radiation storms */
 		if (data->obs_srs) {
 			offset = 0;
-			for (int i = 0; i < 5 + 1; i++) {
+			for (int i = 0; i <= 5; i++) {
 				if (i + 1 == data->obs_srs) {
 					number_len =
 						geophys_obs_srs_sizes[i];
@@ -272,7 +317,7 @@ void build_geophys_announcement(int hour,
 		/* observed radio blackout */
 		if (data->obs_radio_blackout) {
 			offset = 0;
-			for (int i = 0; i < 5 + 1; i++) {
+			for (int i = 0; i <= 5; i++) {
 				if (i + 1 == data->obs_radio_blackout) {
 					number_len = geophys_obs_rb_sizes[i];
 					memcpy(out_buffer + samples,
@@ -300,7 +345,7 @@ void build_geophys_announcement(int hour,
 		/* predicted space weather */
 		if (data->pred_space_wx) {
 			offset = 0;
-			for (int i = 0; i < 5 + 1; i++) {
+			for (int i = 0; i <= 5; i++) {
 				if (i + 1 == data->pred_space_wx) {
 					number_len =
 						geophys_pred_space_wx_sizes[i];
@@ -318,7 +363,7 @@ void build_geophys_announcement(int hour,
 		/* predicted solar radiation storms */
 		if (data->pred_srs) {
 			offset = 0;
-			for (int i = 0; i < 15 + 1; i++) {
+			for (int i = 0; i <= 15; i++) {
 				if (i + 1 == data->pred_srs) {
 					number_len =
 						geophys_pred_srs_sizes[i];
@@ -336,7 +381,7 @@ void build_geophys_announcement(int hour,
 		/* predicted radio blackout */
 		if (data->pred_radio_blackout) {
 			offset = 0;
-			for (int i = 0; i < 10 + 1; i++) {
+			for (int i = 0; i <= 10; i++) {
 				if (i + 1 == data->pred_radio_blackout) {
 					number_len = geophys_pred_rb_sizes[i];
 					memcpy(out_buffer + samples,

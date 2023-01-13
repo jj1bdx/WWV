@@ -19,11 +19,9 @@
 #include <sndfile.h>
 #include "header.h"
 
-#define MAXNUM 199
-
-int main() {
+int main(int argc, char **argv) {
 	/* lengths */
-	unsigned int sizes[MAXNUM + 1];
+	unsigned int sizes[99 + 1];
 
 	short *audio;
 	char file[32];
@@ -33,44 +31,53 @@ int main() {
 
 	unsigned int frames;
 	unsigned int total_frames;
-	int not_found[MAXNUM + 1];
+	unsigned int total_frames_per_segment[4 + 1];
+	int not_found[99 + 1];
 
 	int newline;
 
 	const int default_num_size = 10;
 
-	audio = malloc(16000*(MAXNUM + 1)*2 * sizeof(short));
+	int segment;
 
-	total_frames = 0; /* accumulated number of frames for each station */
+	if (argc < 1) return 1;
 
-	for (int i = 0; i < MAXNUM + 1; i++) {
-		not_found[i] = 0;
-		snprintf(file, 32, "../assets/geophys/%d.wav", i);
+	segment = strtol(argv[1], NULL, 10);
+
+	audio = malloc(16000*(99 + 1)*2 * sizeof(short));
+
+	total_frames = 0; /* accumulated number of frames */
+
+	for (int j = 0; j < 99 + 1; j++) {
+		not_found[j] = 0;
+		snprintf(file, 32, "../assets/geophys/%d.wav", segment * 100 + j);
 		if (!(inf = sf_open(file, SFM_READ, &sfinfo))) {
-			not_found[i] = 1;
+			not_found[j] = 1;
 			frames = default_num_size;
-			sizes[i] = default_num_size;
+			sizes[j] = default_num_size;
 		} else {
 			frames = sfinfo.frames;
-			sizes[i] = frames;
+			sizes[j] = frames;
 
 			sf_read_short(inf, audio+total_frames, frames);
 			sf_close(inf);
 		}
-
 		total_frames += frames;
-
 	}
+	total_frames_per_segment[segment] = total_frames;
 
 	newline = 0;
 
 	printf(HEADER);
-	printf("short geophys_nums[%d] = {\n", total_frames);
-	for (unsigned int i = 0; i < total_frames; i++) {
-		if (i == total_frames - 1) {
-			printf("%6d\n", audio[i]);
+	fprintf(stderr, HEADER);
+
+	printf("short geophys_nums_%d_%d[%d] = {\n",
+		segment * 100, segment * 100 + 99, total_frames_per_segment[segment]);
+	for (unsigned int j = 0; j < total_frames_per_segment[segment]; j++) {
+		if (j == total_frames - 1) {
+			printf("%6d\n", audio[j]);
 		} else {
-			printf("%6d,", audio[i]);
+			printf("%6d,", audio[j]);
 		}
 		if (++newline == 10) {
 			printf("\n");
@@ -81,19 +88,20 @@ int main() {
 
 	newline = 0;
 
-	printf("int geophys_nums_sizes[%d] = {\n", MAXNUM + 1);
-	for (int i = 0; i < MAXNUM + 1; i++) {
-		if (not_found[i]) {
-			if (i == MAXNUM) {
-				printf("%6d /* no audio for %d */\n", default_num_size, i);
+	printf("int geophys_nums_%d_%d_sizes[%d] = {\n",
+		segment * 100, segment * 100 + 99, total_frames_per_segment[segment]);
+	for (int j = 0; j < 99 + 1; j++) {
+		if (not_found[j]) {
+			if (j == 99) {
+				printf("%6d /* no audio for %d */\n", default_num_size, j);
 			} else {
-				printf("%6d /* no audio for %d */,", default_num_size, i);
+				printf("%6d /* no audio for %d */,", default_num_size, j);
 			}
 		} else {
-			if (i == MAXNUM) {
-				printf("%6d\n", sizes[i]);
+			if (j == 99) {
+				printf("%6d\n", sizes[j]);
 			} else {
-				printf("%6d,", sizes[i]);
+				printf("%6d,", sizes[j]);
 			}
 		}
 		if (++newline == 10) {
@@ -103,9 +111,10 @@ int main() {
 	}
 	printf("};\n");
 
-	fprintf(stderr, HEADER);
-	fprintf(stderr, "extern short geophys_nums[%d];\n", total_frames);
-	fprintf(stderr, "extern int geophys_nums_sizes[%d];\n", MAXNUM + 1);
+	fprintf(stderr, "extern short geophys_nums_%d_%d[%d];\n",
+		segment * 100, segment * 100 + 99, total_frames_per_segment[segment]);
+	fprintf(stderr, "extern int geophys_nums_%d_%d_sizes[%d];\n",
+		segment * 100, segment * 100 + 99, 99 + 1);
 
 	free(audio);
 
