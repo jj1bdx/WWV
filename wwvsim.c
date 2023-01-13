@@ -112,11 +112,11 @@ static unsigned char wav_header[] = {
 /* needed to work around implicit declaration */
 extern int nanosleep(const struct timespec *req, struct timespec *rem);
 
-/* millisecond sleep */
-static void msleep(unsigned int ms) {
+/* nanosecond sleep */
+static void nsleep(unsigned int ns) {
 	struct timespec ts;
-	ts.tv_sec = ms / 1000u;			/* whole seconds */
-	ts.tv_nsec = (ms % 1000u) * 1000000;	/* remainder, in nanoseconds */
+	ts.tv_sec = 0;
+	ts.tv_nsec = ns;
 	nanosleep(&ts, NULL);
 }
 
@@ -132,7 +132,7 @@ static void wait_for_start() {
 		if (utc->tm_sec == 0) break;
 
 		/* wait 1 ms before polling again */
-		msleep(1);
+		nsleep(1000);
 	}
 }
 
@@ -896,8 +896,9 @@ int main(int argc,char *argv[]) {
 	int year_of_previous_month, month_of_prev_day, prev_day;
 	int dut1 = 0;
 	int manual_time = 0;
-	int sample_offset = 0;
-	struct timeval tv1, tv2;
+	int samplenum = 0;
+	int offset = 0;
+	struct timeval synctv;
 #ifdef DIRECT
 	double fsec;
 	int devnum = -1;
@@ -1104,27 +1105,41 @@ int main(int argc,char *argv[]) {
 				manual_time = 1; // do this only first time
 			}
 
-			/* take a time reading */
-			gettimeofday(&tv1, NULL);
+			for (int i = 0; i < length; i++) {
+				/* take a time reading */
+				gettimeofday(&synctv, NULL);
 
-			// Write the constructed buffer, minus startup delay plus however many seconds
-			// have already elapsed since the minute. This happens only at startup;
-			// on all subsequent minutes the entire buffer will be written
-			fwrite(audio + sample_offset,
-				sizeof(*audio),
-				Samprate * length - sample_offset,
-				stdout);
+				/*
+				 * get the number of samples that should be skipped so the simulator
+				 * stays in sync
+				 */
+				if (synctv.tv_usec < 500000) { /* going too slow */
+					offset = synctv.tv_usec / 1000;
+				} else { /* going too fast */
+					offset = (synctv.tv_usec - 1000000) / 1000;
+				}
 
-			/* now find out how long it took to play the audio */
-			gettimeofday(&tv2, NULL);
+				samplenum = offset * Samprate_ms / 1000;
+				if (samplenum) samplenum += Samprate_ms;
 
-			/*
-			 * get the number of samples that should be skipped so the simulator
-			 * stays in sync
-			 */
-			sample_offset = (((tv2.tv_usec - tv1.tv_usec) / 1000) * Samprate_ms) / 1000;
-			if (sample_offset < 0) sample_offset = 0;
+				if (Verbose) {
+                                        fprintf(stderr, "offset: %d\n", offset);
+                                        fprintf(stderr, "sample num: %d\n", samplenum);
+                                }
 
+				if (offset < 0) {
+                                        nsleep(-offset);
+                                        offset = 0;
+                                        samplenum = 0;
+                                }
+
+				// Write the constructed buffer, minus startup delay plus however many seconds
+				// have already elapsed since the minute. This happens only at startup;
+				// on all subsequent minutes the entire buffer will be written
+				fwrite(audio + samplenum + Samprate * i, sizeof(*audio),
+					Samprate - samplenum, stdout);
+				fflush(stdout);
+			}
 #ifdef DIRECT
 		} else {
 			Buffers++;
