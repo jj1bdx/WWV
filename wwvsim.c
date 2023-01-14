@@ -1120,7 +1120,9 @@ int main(int argc,char *argv[]) {
 				}
 
 				samplenum = offset * Samprate_ms / 1000;
-				if (samplenum) samplenum += Samprate_ms;
+
+				/* to speed up correction */
+				if (samplenum) samplenum *= Samprate_ms * 4;
 
 				if (Verbose) {
                                         fprintf(stderr, "offset: %d\n", offset);
