@@ -16,9 +16,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define GEO_DATA_PATH	"/tmp/wwv-geophys.data"
+#define GEO_DATA_SIZE	64
+
 typedef struct geophys_data_t {
+	/* previous day */
+	uint8_t month_of_prev_day;
+	uint8_t prev_day;
+
 	uint16_t solar_flux;
+
 	uint8_t a_index;
+
+	uint8_t hour;
+
+	uint8_t month_of_cur_day;
+	uint8_t cur_day;
+
 	/* decimal parts */
 	uint16_t k_index_int;
 	uint16_t k_index_dec;
@@ -32,7 +46,7 @@ typedef struct geophys_data_t {
 	uint8_t pred_radio_blackout;
 } geophys_data_t;
 
+extern void get_geophys_data(struct geophys_data_t *data);
 extern void build_geophys_announcement(
-	int hour, int prev_month, int month, int prev_day, int day,
 	struct geophys_data_t *data,
 	int len, short *voice);

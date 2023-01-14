@@ -18,6 +18,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #include "audio/geophys_ann.h"
 #include "audio/geophys_months.h"
@@ -28,10 +31,41 @@
 #include "audio/geophys_storms.h"
 #include "geophys.h"
 
-void build_geophys_announcement(int hour,
-	int month_of_prev_day, int month,
-	int prev_day, int day,
-	struct geophys_data_t *data,
+/* obtain geophysical data via a text file */
+void get_geophys_data(struct geophys_data_t *data) {
+	int fd;
+	static char buf[GEO_DATA_SIZE];
+
+	memset(buf, 0, GEO_DATA_SIZE);
+
+	/*
+	 * clear the data here so if parsing fails for some reason we're not
+	 * broadcasting old data
+	 */
+	memset(data, 0, sizeof(struct geophys_data_t));
+
+	if ((fd = open(GEO_DATA_PATH, O_RDONLY)) < 0) return;
+	read(fd, buf, GEO_DATA_SIZE - 1);
+	close(fd);
+
+	/* parse the file for the data */
+	sscanf(buf,
+		"%hhu,%hhu,%hu,%hhu,%hhu,%hhu,%hhu,%hu.%hu,%hhu,%hhu,%hhu,%hhu,%hhu,%hhu",
+		&data->month_of_prev_day, &data->prev_day,
+		&data->solar_flux,
+		&data->a_index,
+		&data->hour, &data->month_of_cur_day, &data->cur_day,
+		&data->k_index_int, &data->k_index_dec,
+		&data->obs_space_wx,
+		&data->obs_srs,
+		&data->obs_radio_blackout,
+		&data->pred_space_wx,
+		&data->pred_srs,
+		&data->pred_radio_blackout
+	);
+}
+
+void build_geophys_announcement(struct geophys_data_t *data,
 	int len, short *voice) {
 
 	int samples = 0;
@@ -55,7 +89,7 @@ void build_geophys_announcement(int hour,
 	/* yesterday's day of month */
 	offset = 0;
 	for (int i = 0; i <= 31; i++) {
-		if (i == prev_day) {
+		if (i == data->prev_day) {
 			number_len = geophys_nums_0_99_sizes[i];
 			memcpy(out_buffer + samples, geophys_nums_0_99 + offset,
 				number_len * sizeof(*voice));
@@ -69,7 +103,7 @@ void build_geophys_announcement(int hour,
 	/* the month of yesterday */
 	offset = 0;
 	for (int i = 0; i <= 12; i++) {
-		if (i == month_of_prev_day) {
+		if (i == data->month_of_prev_day) {
 			number_len = geophys_months_sizes[i - 1];
 			memcpy(out_buffer + samples, geophys_months + offset,
 				number_len * sizeof(*voice));
@@ -187,7 +221,7 @@ void build_geophys_announcement(int hour,
 	/* current hour */
 	offset = 0;
 	for (int i = 0; i < 24; i++) {
-		if (i == hour) {
+		if (i == data->hour) {
 			number_len = geophys_nums_0_99_sizes[i];
 			memcpy(out_buffer + samples, geophys_nums_0_99 + offset,
 				number_len * sizeof(*voice));
@@ -208,7 +242,7 @@ void build_geophys_announcement(int hour,
 	/* today's day */
 	offset = 0;
 	for (int i = 0; i <= 31; i++) {
-		if (i == day) {
+		if (i == data->cur_day) {
 			number_len = geophys_nums_0_99_sizes[i];
 			memcpy(out_buffer + samples, geophys_nums_0_99 + offset,
 				number_len * sizeof(*voice));
@@ -222,7 +256,7 @@ void build_geophys_announcement(int hour,
 	/* today's month */
 	offset = 0;
 	for (int i = 0; i <= 12; i++) {
-		if (i == month) {
+		if (i == data->month_of_cur_day) {
 			number_len = geophys_months_sizes[i - 1];
 			memcpy(out_buffer + samples, geophys_months + offset,
 				number_len * sizeof(*voice));

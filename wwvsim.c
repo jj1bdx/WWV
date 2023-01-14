@@ -32,18 +32,14 @@
 #include <math.h>
 #include <memory.h>
 #include <sys/time.h>
-#if 0
-#include <sys/stat.h>
-#endif
 #include <stdint.h>
 #include <getopt.h>
-#include <pthread.h>
 
 #ifdef DIRECT
 #include <portaudio.h>
 #endif
 
-/* for dynamic geophysical reports */
+/* for dynamic ut1 diff */
 #include <fcntl.h>
 
 #include "voice.h"
@@ -136,41 +132,24 @@ static void wait_for_start() {
 	}
 }
 
-#define GEO_DATA_PATH	"/tmp/wwv-geophys.data"
-#define GEO_DATA_SIZE	32
+typedef struct ut1_data_t {
+	uint8_t check;
+	int8_t diff;
+} ut1_data_t;
 
-/* obtain geophysical data via a text file */
-static void get_geophys_data(geophys_data_t *data) {
+static void get_ut1_diff(struct ut1_data_t *data) {
 	int fd;
-	static char buf[GEO_DATA_SIZE];
+	static char buf[5]; /* read up to 4 chars */
 
-	memset(buf, 0, GEO_DATA_SIZE);
+	memset(buf, 0, 5);
+	memset(data, 0, sizeof(struct ut1_data_t));
 
-	/*
-	 * clear the data here so if parsing fails for some reason we're not
-	 * broadcasting old data
-	 */
-	memset(data, 0, sizeof(struct geophys_data_t));
-
-	fd = open(GEO_DATA_PATH, O_RDONLY);
-	if (fd < 0) return;
-
-	read(fd, buf, GEO_DATA_SIZE - 1);
+	if ((fd = open("/tmp/wwv-ut1.data", O_RDONLY)) < 0) return;
+	read(fd, buf, 4);
 	close(fd);
 
-	/* parse the file for the data */
-	sscanf(buf, "%hu,%hhu,%hu.%hu,%hhu,%hhu,%hhu,%hhu,%hhu,%hhu",
-		&data->solar_flux,
-		&data->a_index,
-		&data->k_index_int,
-		&data->k_index_dec,
-		&data->obs_space_wx,
-		&data->obs_srs,
-		&data->obs_radio_blackout,
-		&data->pred_space_wx,
-		&data->pred_srs,
-		&data->pred_radio_blackout
-	);
+	/* parse */
+	sscanf(buf, "%hhu,%hhd", &data->check, &data->diff);
 }
 
 // Is specified year a leap year?
@@ -374,16 +353,11 @@ static int announce_phone(int16_t *audio, int startms, int stopms) {
 
 /* Geophysical report: WWV/H */
 static int announce_geophys(int16_t *audio, int startms, int stopms,
-	int this_hour, int this_month, int month_of_prev_day, int prev_day, int day,
 	struct geophys_data_t *data) {
 	if (startms < 0 || startms >= 61000 || stopms <= startms || stopms > 61000)
 		return -1;
 
-	build_geophys_announcement(
-		this_hour,
-		month_of_prev_day, this_month,
-		prev_day, day,
-		data,
+	build_geophys_announcement(data,
 		(stopms - startms)*Samprate_ms, audio + startms*Samprate_ms
 	);
 
@@ -654,7 +628,6 @@ static void decode_timecode(unsigned char *code,int length) {
 
 // Insert tone or announcement into seconds 1-44
 static void gen_tone_or_announcement(int16_t *output,int wwvh,int hour,int minute,
-	int month_of_prev_day, int prev_day, int month, int day,
 	struct geophys_data_t *geophys_data) {
 	const double tone_amp = pow(10.,-6.0/20.); // -6 dB
 
@@ -719,14 +692,10 @@ done:
 
 	/* geophysical alerts on minute 18 */
 	} else if (!wwvh && minute == 18) {
-		announce_geophys(output, 2500, 45000,
-			hour, month, month_of_prev_day, prev_day, day,
-			geophys_data);
+		announce_geophys(output, 2500, 45000, geophys_data);
 	/* ... and on minute 45 */
 	} else if (wwvh && minute == 45) {
-		announce_geophys(output, 2500, 45000,
-			hour, month, month_of_prev_day, prev_day, day,
-			geophys_data);
+		announce_geophys(output, 2500, 45000, geophys_data);
 
 	/* HamSci */
 	} else if (!wwvh && minute == 4) {
@@ -756,8 +725,7 @@ done:
 
 
 static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,int dut1,int hour,int minute,
-	int month_of_prev_day, int prev_day, int cur_month, int cur_day,
-	struct geophys_data_t *data) {
+	struct geophys_data_t *geophys_data) {
 	// Amplitudes
 	// NIST 250-67, p 50
 	const double marker_high_amp = pow(10.,-6.0/20.);
@@ -771,12 +739,12 @@ static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,i
 
 	/* this is updated hourly */
 	if (minute == 15)
-		get_geophys_data(data);
+		get_geophys_data(geophys_data);
 
 	// Build a minute of audio
 	memset(output,0,length*Samprate*sizeof(*output)); // Clear previous audio
 	gen_tone_or_announcement(output,wwvh,hour,minute,
-		month_of_prev_day, prev_day, cur_month, cur_day, data);
+		geophys_data);
 
 	// Insert minute announcement
 	int nextminute,nexthour; // What are the next hour and minute?
@@ -893,7 +861,6 @@ static int pa_callback(const void *inputBuffer, void *outputBuffer,
 int main(int argc,char *argv[]) {
 	int c;
 	int year,month,day,hour,minute;
-	int year_of_previous_month, month_of_prev_day, prev_day;
 	int dut1 = 0;
 	int manual_time = 0;
 	int samplenum = 0;
@@ -911,6 +878,7 @@ int main(int argc,char *argv[]) {
 	fsec = 0.0;
 #endif
 
+	struct ut1_data_t ut1_diff_data;
 	struct geophys_data_t geophys_data;
 
 #if 0
@@ -1052,20 +1020,6 @@ int main(int argc,char *argv[]) {
 	month = utc->tm_mon + 1;
 	year = utc->tm_year + 1900;
 
-	year_of_previous_month = year;
-	month_of_prev_day = month;
-	prev_day = day;
-
-	prev_day--;
-	if (prev_day == -1) {
-		month_of_prev_day--;
-		if (month_of_prev_day == -1) {
-			year_of_previous_month--;
-			month_of_prev_day = 12;
-		}
-		prev_day = get_days_in_month(year_of_previous_month, month_of_prev_day);
-	}
-
 	/* get geophysical report on startup */
 	get_geophys_data(&geophys_data);
 
@@ -1094,9 +1048,14 @@ int main(int argc,char *argv[]) {
 			decode_timecode(code,length);
 		}
 
+		/* get UT1 difference */
+		get_ut1_diff(&ut1_diff_data);
+
+		if (ut1_diff_data.check == 1)
+			dut1 = ut1_diff_data.diff;
+
 		// Build a minute of audio
-		makeminute(audio,length,WWVH,code,dut1,hour,minute,
-				month_of_prev_day, prev_day, month, day, &geophys_data);
+		makeminute(audio,length,WWVH,code,dut1,hour,minute,&geophys_data);
 
 #ifdef DIRECT
 		if (!Direct_mode) {
@@ -1170,18 +1129,9 @@ int main(int argc,char *argv[]) {
 				// New day
 				hour = 0;
 
-				/*
-				 * previous day
-				 * needed for geophysical reports
-				 */
-				prev_day = day;
-
 				if (++day > get_days_in_month(year, month)) {
 					// New month
 					day = 1;
-
-					/* month of the previous day */
-					month_of_prev_day = month;
 
 					if (++month > 12) {
 						// New year
