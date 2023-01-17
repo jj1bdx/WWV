@@ -39,10 +39,12 @@ typedef struct geophys_data_t {
 
 	uint8_t obs_space_wx;
 	uint8_t obs_srs;
+	uint8_t obs_geomag;
 	uint8_t obs_radio_blackout;
 
 	uint8_t pred_space_wx;
 	uint8_t pred_srs;
+	uint8_t pred_geomag;
 	uint8_t pred_radio_blackout;
 } geophys_data_t;
 

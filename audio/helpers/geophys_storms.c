@@ -21,14 +21,14 @@
 
 int main() {
 	/* lengths */
-	int sizes[10];
+	int sizes[15];
 	int sizes_counter = 0;
 
 	short *audio;
 	char file[64];
 
 	char *times[] = {"obs", "pred"};
-	char *events[] = {"rb", "space_wx", "srs"};
+	char *events[] = {"rb", "space_wx", "srs", "geomag"};
 	char *prob[] = {"likely", "expected", "expected_to_cont"};
 	char *levels[] = {"minor", "moderate", "strong", "severe", "extreme"};
 	char *no_storms[] = {"no_past_storms", "no_future_storms"};
@@ -244,6 +244,77 @@ int main() {
 		}
 		printf("};\n");
 		fprintf(stderr, "extern int geophys_%s_%s_sizes[%d];\n", times[i], events[2], sizes_counter);
+
+		total_frames = 0;
+		newline = 0;
+
+		/* geomagnetic storms */
+		sizes_counter = 5;
+		if (i == 1) {
+                        int m = 0;
+                        sizes_counter = 10;
+                        for (int j = 0; j < 2; j++) {
+                                for (int k = 0; k < 5; k++) {
+					snprintf(file, 64, "../assets/geophys/%s_%s_g%d_%s.wav",
+						times[i], events[3], k + 1, prob[j]);
+					if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
+
+					frames = sfinfo.frames;
+					sizes[m] = frames;
+
+					sf_read_short(inf, audio+total_frames, frames);
+					sf_close(inf);
+
+					total_frames += frames;
+					m++;
+				}
+			}
+		} else {
+			for (int j = 0; j < 5; j++) {
+				snprintf(file, 64, "../assets/geophys/%s_%s_g%d.wav",
+					times[i], events[3], j + 1);
+				if (!(inf = sf_open(file, SFM_READ, &sfinfo))) goto exit;
+				frames = sfinfo.frames;
+				sizes[j] = frames;
+
+				sf_read_short(inf, audio+total_frames, frames);
+				sf_close(inf);
+				total_frames += frames;
+			}
+		}
+
+		printf("short geophys_%s_%s[%d] = {\n", times[i], events[3], total_frames);
+		for (int j = 0; j < total_frames; j++) {
+			if (j == total_frames - 1) {
+				printf("%6d\n", audio[j]);
+			} else {
+				printf("%6d,", audio[j]);
+			}
+			if (++newline == 10) {
+				printf("\n");
+				newline = 0;
+			}
+		}
+		printf("};\n");
+		fprintf(stderr, "extern short geophys_%s_%s[%d];\n", times[i], events[3], total_frames);
+
+		total_frames = 0;
+		newline = 0;
+
+		printf("int geophys_%s_%s_sizes[%d] = {\n", times[i], events[3], sizes_counter);
+		for (int j = 0; j < sizes_counter; j++) {
+			if (j == sizes_counter - 1) {
+				printf("%6d\n", sizes[j]);
+			} else {
+				printf("%6d,", sizes[j]);
+			}
+			if (++newline == 10) {
+				printf("\n");
+				newline = 0;
+			}
+		}
+		printf("};\n");
+		fprintf(stderr, "extern int geophys_%s_%s_sizes[%d];\n", times[i], events[3], sizes_counter);
 	}
 
 	for (int i = 0; i < 2; i++) {
