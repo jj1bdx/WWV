@@ -34,8 +34,8 @@ typedef struct geophys_data_t {
 	uint8_t cur_day;
 
 	/* decimal parts */
-	uint16_t k_index_int;
-	uint16_t k_index_dec;
+	uint8_t k_index_int;
+	uint8_t k_index_dec;
 
 	uint8_t obs_space_wx;
 	uint8_t obs_srs;

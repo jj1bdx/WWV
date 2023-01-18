@@ -145,7 +145,7 @@ static void get_ut1_diff(struct ut1_data_t *data) {
 	memset(data, 0, sizeof(struct ut1_data_t));
 
 	if ((fd = open("/tmp/wwv-ut1.data", O_RDONLY)) < 0) return;
-	read(fd, buf, 4);
+	if (read(fd, buf, 4) < 3) return;
 	close(fd);
 
 	/* parse */

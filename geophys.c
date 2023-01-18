@@ -45,12 +45,12 @@ void get_geophys_data(struct geophys_data_t *data) {
 	memset(data, 0, sizeof(struct geophys_data_t));
 
 	if ((fd = open(GEO_DATA_PATH, O_RDONLY)) < 0) return;
-	read(fd, buf, GEO_DATA_SIZE - 1);
+	if (read(fd, buf, GEO_DATA_SIZE - 1) < 20) return;
 	close(fd);
 
 	/* parse the file for the data */
 	sscanf(buf,
-		"%hhu,%hhu,%hu,%hhu,%hhu,%hhu,%hhu,%hu.%hu,%hhu,%hhu,%hhu,%hhu,%hhu,%hhu,%hhu,%hhu",
+		"%hhu,%hhu,%hu,%hhu,%hhu,%hhu,%hhu,%hhu.%hhu,%hhu,%hhu,%hhu,%hhu,%hhu,%hhu,%hhu,%hhu",
 		&data->month_of_prev_day, &data->prev_day,
 		&data->solar_flux,
 		&data->a_index,
