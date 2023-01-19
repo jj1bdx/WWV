@@ -864,7 +864,8 @@ int main(int argc,char *argv[]) {
 	int dut1 = 0;
 	int manual_time = 0;
 	int samplenum = 0;
-	int offset = 0;
+	int delaysamplenum = 0;
+	int sync_delay = 0;
 	struct timeval synctv;
 #ifdef DIRECT
 	double fsec;
@@ -1072,33 +1073,31 @@ int main(int argc,char *argv[]) {
 				 * get the number of samples that should be skipped so the simulator
 				 * stays in sync
 				 */
-				if (synctv.tv_usec < 500000) { /* going too slow */
-					offset = synctv.tv_usec / 1000;
-				} else { /* going too fast */
-					offset = (synctv.tv_usec - 1000000) / 1000;
+				if (synctv.tv_usec < 500000) /* going too slow */
+					sync_delay = synctv.tv_usec / 1000;
+				else /* going too fast */
+					sync_delay = (synctv.tv_usec - 1000000) / 1000;
+
+				/* delay if we're running early */
+				if (sync_delay < 0) {
+					samplenum = 0;
+					delaysamplenum = (-sync_delay * Samprate_ms / 1000) * 2;
+				} else { /* skip if we're running late */
+					samplenum = (sync_delay * Samprate_ms / 1000) * 2;
+					delaysamplenum = 0;
 				}
 
-				samplenum = offset * Samprate_ms / 1000;
-
-				/* to speed up correction */
-				if (samplenum) samplenum *= Samprate_ms * 4;
-
 				if (Verbose) {
-                                        fprintf(stderr, "offset: %d\n", offset);
-                                        fprintf(stderr, "sample num: %d\n", samplenum);
-                                }
-
-				if (offset < 0) {
-                                        nsleep(-offset);
-                                        offset = 0;
-                                        samplenum = 0;
-                                }
+					fprintf(stderr, "sync delay: %d nsec\n", sync_delay);
+					fprintf(stderr, "+ sample num: %d\n", samplenum);
+					fprintf(stderr, "- sample num: %d\n", delaysamplenum);
+				}
 
 				// Write the constructed buffer, minus startup delay plus however many seconds
 				// have already elapsed since the minute. This happens only at startup;
 				// on all subsequent minutes the entire buffer will be written
 				fwrite(audio + samplenum + Samprate * i, sizeof(*audio),
-					Samprate - samplenum, stdout);
+					Samprate + delaysamplenum - samplenum, stdout);
 				fflush(stdout);
 			}
 #ifdef DIRECT
