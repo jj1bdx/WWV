@@ -816,7 +816,7 @@ static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,i
 
 
 // Address of malloc'ed audio output buffer, 2 minutes + 1 second long (in case of leap second)
-static int16_t Audio_buffer[SAMPLE_RATE*2*61];
+static int16_t Audio_buffer[SAMPLE_RATE*2*61+SAMPLE_RATE];
 
 #ifdef DIRECT
 
