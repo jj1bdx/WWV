@@ -34,6 +34,7 @@
 #include <sys/time.h>
 #include <stdint.h>
 #include <getopt.h>
+#include <signal.h>
 
 #ifdef DIRECT
 #include <portaudio.h>
@@ -73,6 +74,8 @@ static int Verbose = 0;
 
 static int Negative_leap_second_pending = 0; // If 1, leap second will be removed at end of June or December, whichever is first
 static int Positive_leap_second_pending = 0; // If 1, leap second will be inserted at end of June or December, whichever is first
+
+static int shutdown = 0;
 
 /* super primitive WAVE header */
 static unsigned char wav_header[] = {
@@ -116,9 +119,19 @@ static void nsleep(unsigned int ns) {
 	nanosleep(&ts, NULL);
 }
 
+static void exit_loop() {
+	shutdown = 1;
+}
+
 static void wait_for_start() {
 	struct tm *utc;
 	time_t now;
+
+	/* wait for the end of the minute if already at the 0th second */
+	now = time(NULL);
+	utc = gmtime(&now);
+	if (utc->tm_sec == 0)
+		nsleep(1000000);
 
 	while (1) {
 		/* check time */
@@ -132,24 +145,17 @@ static void wait_for_start() {
 	}
 }
 
-typedef struct ut1_data_t {
-	uint8_t check;
-	int8_t diff;
-} ut1_data_t;
-
-static void get_ut1_diff(struct ut1_data_t *data) {
+static void get_ut1_diff(int *diff) {
 	int fd;
-	static char buf[5]; /* read up to 4 chars */
-
-	memset(buf, 0, 5);
-	memset(data, 0, sizeof(struct ut1_data_t));
+	static char buf[3]; /* read up to 2 chars */
 
 	if ((fd = open("/tmp/wwv-ut1.data", O_RDONLY)) < 0) return;
-	if (read(fd, buf, 4) < 3) return;
+	if (read(fd, buf, 4) < 1) return;
 	close(fd);
 
 	/* parse */
-	sscanf(buf, "%hhu,%hhd", &data->check, &data->diff);
+	sscanf(buf, "%d", diff);
+	if (*diff < -7 || *diff > 7) *diff = 0;
 }
 
 // Is specified year a leap year?
@@ -814,10 +820,6 @@ static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,i
 	}
 }
 
-
-// Address of malloc'ed audio output buffer, 2 minutes + 1 second long (in case of leap second)
-static int16_t Audio_buffer[SAMPLE_RATE*2*61+SAMPLE_RATE];
-
 #ifdef DIRECT
 
 volatile int Odd_minute_length = 60; // 59 or 61 if leap second pending at end of current odd minute
@@ -872,6 +874,9 @@ int main(int argc,char *argv[]) {
 	int devnum = -1;
 #endif
 
+	// Address of malloc'ed audio output buffer, 2 minutes + 1 second long (in case of leap second)
+	int16_t *Audio_buffer;
+
 	// Use current computer clock time as default
 	time_t now;
 	struct tm *utc;
@@ -879,7 +884,6 @@ int main(int argc,char *argv[]) {
 	fsec = 0.0;
 #endif
 
-	struct ut1_data_t ut1_diff_data;
 	struct geophys_data_t geophys_data;
 
 #if 0
@@ -953,10 +957,9 @@ int main(int argc,char *argv[]) {
 				exit(1);
 		}
 	}
-	// Allocate an audio buffer >= 2 minutes + 1 second long
-	// Even minutes will use first half, odd minutes second half
-	//Audio_buffer = malloc(2*Samprate*61*sizeof(int16_t));
-	//memset(Audio_buffer,0,2*Samprate*61*sizeof(int16_t));
+
+	signal(SIGINT, exit_loop);
+	signal(SIGTERM, exit_loop);
 
 	if (isatty(fileno(stdout))) {
 #ifdef DIRECT
@@ -986,6 +989,11 @@ int main(int argc,char *argv[]) {
 #endif
 
 	}
+
+	// Allocate an audio buffer >= 2 minutes + 2 seconds long
+	// Even minutes will use first half, odd minutes second half
+	Audio_buffer = malloc(2*Samprate*62*sizeof(int16_t));
+	memset(Audio_buffer,0,2*Samprate*62*sizeof(int16_t));
 
 	//if (year < 2007)
 	//	fprintf(stderr,"Warning: DST rules prior to %d not implemented; DST bits = 0\n",year);    // Punt
@@ -1050,10 +1058,7 @@ int main(int argc,char *argv[]) {
 		}
 
 		/* get UT1 difference */
-		get_ut1_diff(&ut1_diff_data);
-
-		if (ut1_diff_data.check == 1)
-			dut1 = ut1_diff_data.diff;
+		get_ut1_diff(&dut1);
 
 		// Build a minute of audio
 		makeminute(audio,length,WWVH,code,dut1,hour,minute,&geophys_data);
@@ -1099,6 +1104,8 @@ int main(int argc,char *argv[]) {
 				fwrite(audio + samplenum + Samprate * i, sizeof(*audio),
 					Samprate + delaysamplenum - samplenum, stdout);
 				fflush(stdout);
+
+				if (shutdown) break;
 			}
 #ifdef DIRECT
 		} else {
@@ -1110,6 +1117,8 @@ int main(int argc,char *argv[]) {
 				sleep(1);
 		}
 #endif
+
+		if (shutdown) break;
 
 		if (length == 61) {
 			// Leap second just occurred in this last minute
@@ -1141,5 +1150,7 @@ int main(int argc,char *argv[]) {
 			}
 		}
 	}
+
+	free(Audio_buffer);
 }
 
