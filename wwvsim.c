@@ -70,6 +70,7 @@ static int Samprate_ms = SAMPLE_RATE / 1000;      // Samples per millisecond - s
 static int Direct_mode;      // Writing directly to audio device
 #endif
 static int WWVH = 0; // WWV by default
+static int WWVB = 0;
 static int Verbose = 0;
 
 static int Negative_leap_second_pending = 0; // If 1, leap second will be removed at end of June or December, whichever is first
@@ -474,6 +475,13 @@ static void encode(unsigned char *code,int x) {
 		x >>= 1;
 	}
 }
+/* WWVB */
+static void encode_be(unsigned char *code,int x) {
+	for (int i=4;i>0;i--) {
+		code[i] = x & 1;
+		x >>= 1;
+	}
+}
 static int decode(unsigned char *code) {
 	int r = 0;
 	for (int i=3; i>=0; i--) {
@@ -587,6 +595,51 @@ static void maketimecode(unsigned char *code,int dut1,int leap_pending,int year,
 	// UT1 offset, +/-0.0 through 0.7; adjusted after leap second
 	code[50] = (dut1 >= 0); // sign
 	encode(code+56,abs(dut1));  // magnitude, extends into marker 59 and is ignored
+}
+
+static void makebetimecode(unsigned char *code,int dut1,int leap_pending,int year,int month,int day,int hour,int minute) {
+	memset(code,0,61*sizeof(*code)); // All bits default to 0
+
+	int doy = day_of_year(year,month,day);
+	int dst_start = dst_start_doy(year);
+
+	if (dst_start >= 1) {
+		// DST always lasts for 238 days
+		if (doy > dst_start && doy <= dst_start + 238)
+			code[57] = 1; // DST status at 00:00 UTC
+
+		if (doy >= dst_start && doy < dst_start + 238)
+			code[58] = 1; // DST status at 24:00 UTC
+#if 0
+		fprintf(stderr,"year %d month %d day %d doy %d dst_start_doy %d dst_start_doy + 238 %d\n",
+			year, month, day, doy, dst_start, dst_start + 238);
+#endif
+	}
+
+	// Minute of hour, 0-59
+	encode_be(code+1,minute/10); // Most significant digit, extends into unused bit 18
+	encode_be(code+5,minute%10); // Least significant digit
+
+	// Hour of day, 0-23
+	encode_be(code+12,hour/10);   // Most significant digit, extends into unused bits 27-28
+	encode_be(code+15,hour%10);   // Least significant digit
+
+	// Day of year, 1-366
+	encode_be(code+22,doy/100);   // High digit, extends into unused bits 42-43
+	encode_be(code+25,(doy/10)%10); // Middle digit
+	encode_be(code+30,doy%10);    // Least significant digit
+
+	// UT1 offset, +/-0.0 through 0.7; adjusted after leap second
+	code[36] = code[38] = (dut1 >= 0); // sign
+	code[37] = (dut1 < 0);
+	encode_be(code+40,abs(dut1));  // magnitude, extends into marker 59 and is ignored
+
+	// Year
+	encode_be(code+45,(year/10)%10); // Tens digit
+	encode_be(code+50,year % 10); // Least significant digit
+
+	code[55] = is_leap_year(year);
+	code[56] = leap_pending;
 }
 
 // Decode frame of timecode to stderr for debugging
@@ -748,7 +801,7 @@ static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,i
 		get_geophys_data(geophys_data);
 
 	// Build a minute of audio
-	memset(output,0,length*Samprate*sizeof(*output)); // Clear previous audio
+	memset(output,0,(length+1)*Samprate*sizeof(*output)); // Clear previous audio
 	gen_tone_or_announcement(output,wwvh,hour,minute,
 		geophys_data);
 
@@ -816,6 +869,34 @@ static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,i
 		if ((dut1 > 0 && s >= 1 && s <= dut1)
 			|| (-dut1 > 0 && s >= 9 && s <= 8-dut1)) {
 			overlay_tone(output,1000*s+100,1000*s+105,tickfreq,tick_amp); // 5 ms second tick at 100 ms
+		}
+	}
+}
+
+static void makewwvbminute(int16_t *output,int length,unsigned char *code) {
+	// Amplitudes
+	// NIST 250-67, p 50
+	const double marker_high_amp = pow(10.,-6.0/20.);
+	//  NIST 250-67, p 47 says 1/3.3 (about -10 dB) but is apparently incorrect; observed is ~ -20 dB
+	//  const double marker_low_amp = marker_high_amp / 3.3;
+	const double marker_low_amp = marker_high_amp / 10;
+
+	// Build a minute of audio
+	memset(output,0,(length+1)*Samprate*sizeof(*output)); // Clear previous audio
+
+	// Modulate time code onto 100 Hz subcarrier
+	add_tone(output,0,1000,100,marker_high_amp);
+	int s;
+	for (s=1; s<length; s++) {
+		if ((s % 10) == 9) {
+			add_tone(output,s*1000,s*1000+800,100,marker_low_amp);  // 800 ms position markers on seconds 9, 19, 29, ...
+			add_tone(output,s*1000+800,s*1000+1000,100,marker_high_amp);
+		} else if (code[s]) {
+			add_tone(output,s*1000,s*1000+500,100,marker_low_amp);  // 500 ms = 1 bit
+			add_tone(output,s*1000+500,s*1000+1000,100,marker_high_amp);
+		} else {
+			add_tone(output,s*1000,s*1000+200,100,marker_low_amp);  // 200 ms = 0 bit
+			add_tone(output,s*1000+200,s*1000+1000,100,marker_high_amp);
 		}
 	}
 }
@@ -893,7 +974,7 @@ int main(int argc,char *argv[]) {
 #endif
 
 	// Read and process command line arguments
-	while ((c = getopt(argc,argv,"HY:M:D:h:m:s:u:r:LNvn:")) != EOF) {
+	while ((c = getopt(argc,argv,"BHY:M:D:h:m:s:u:r:LNvn:")) != EOF) {
 		switch(c) {
 			case 'n':
 #ifdef DIRECT
@@ -906,6 +987,9 @@ int main(int argc,char *argv[]) {
 			case 'r':
 				fprintf(stderr, "Sample rate cannot be changed\n");
 				//Samprate = strtol(optarg,NULL,0); // Try not to change this, may not work
+				break;
+			case 'B': /* WWVB mode */
+				WWVB++;
 				break;
 			case 'H': // Simulate WWVH, otherwise WWV
 				WWVH++;
@@ -1049,7 +1133,11 @@ int main(int argc,char *argv[]) {
 		// Generate timecode
 		unsigned char code[61]; // one extra for a possible leap second
 		int leap_pending = (Positive_leap_second_pending || Negative_leap_second_pending) ? 1 : 0;
-		maketimecode(code,dut1,leap_pending,year,month,day,hour,minute);
+		if (WWVB) {
+			makebetimecode(code,dut1,leap_pending,year,month,day,hour,minute);
+		} else {
+			maketimecode(code,dut1,leap_pending,year,month,day,hour,minute);
+		}
 
 		// Optionally dump timecode
 		if (Verbose) {
@@ -1061,7 +1149,11 @@ int main(int argc,char *argv[]) {
 		get_ut1_diff(&dut1);
 
 		// Build a minute of audio
-		makeminute(audio,length,WWVH,code,dut1,hour,minute,&geophys_data);
+		if (WWVB) {
+			makewwvbminute(audio,length,code);
+		} else {
+			makeminute(audio,length,WWVH,code,dut1,hour,minute,&geophys_data);
+		}
 
 #ifdef DIRECT
 		if (!Direct_mode) {
