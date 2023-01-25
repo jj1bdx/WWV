@@ -151,7 +151,7 @@ static void get_ut1_diff(int *diff) {
 	static char buf[3]; /* read up to 2 chars */
 
 	if ((fd = open("/tmp/wwv-ut1.data", O_RDONLY)) < 0) return;
-	if (read(fd, buf, 4) < 1) return;
+	if (read(fd, buf, 2) < 1) return;
 	close(fd);
 
 	/* parse */
@@ -885,7 +885,8 @@ static void makewwvbminute(int16_t *output,int length,unsigned char *code) {
 	memset(output,0,(length+1)*Samprate*sizeof(*output)); // Clear previous audio
 
 	// Modulate time code onto 100 Hz subcarrier
-	add_tone(output,0,1000,100,marker_high_amp);
+	add_tone(output,0,800,100,marker_low_amp);
+	add_tone(output,800,1000,100,marker_high_amp);
 	int s;
 	for (s=1; s<length; s++) {
 		if ((s % 10) == 9) {
