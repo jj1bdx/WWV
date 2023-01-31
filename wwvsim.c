@@ -876,10 +876,10 @@ static void makeminute(int16_t *output,int length,int wwvh,unsigned char *code,i
 static void makewwvbminute(int16_t *output,int length,unsigned char *code) {
 	// Amplitudes
 	// NIST 250-67, p 50
-	const double marker_high_amp = pow(10.,-6.0/20.);
+	const double marker_high_amp = 1.0;
 	//  NIST 250-67, p 47 says 1/3.3 (about -10 dB) but is apparently incorrect; observed is ~ -20 dB
 	//  const double marker_low_amp = marker_high_amp / 3.3;
-	const double marker_low_amp = marker_high_amp / 10;
+	const double marker_low_amp = pow(10.,-17.0/20.); // -17 dB;
 
 	// Build a minute of audio
 	memset(output,0,(length+1)*Samprate*sizeof(*output)); // Clear previous audio
