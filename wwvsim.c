@@ -1183,23 +1183,29 @@ int main(int argc,char *argv[]) {
 					leadlag = 0;
 				}
 
-				if (leadlag == 2) { /* delay if we're leading */
-					samplenum = 0;
-					delaysamplenum = (sync_delay * Samprate_ms / 1000) * 2;
-				} else if (leadlag == 1) { /* skip if we're lagging */
-					samplenum = (sync_delay * Samprate_ms / 1000) * 2;
+				if (leadlag == 1) { /* skip ahead if we're lagging */
+					samplenum = (sync_delay * Samprate_ms / 1000) + 2;
 					delaysamplenum = 0;
+				} else if (leadlag == 2) { /* delay if we're leading */
+					samplenum = 0;
+					delaysamplenum = (sync_delay * Samprate_ms / 1000) + 2;
 				} else {
 					samplenum = 0;
 					delaysamplenum = 0;
 				}
 
 				if (Verbose) {
-					if (sync_delay) {
+					if (samplenum)
 						fprintf(stderr, "+ sample num: %d\n", samplenum);
+					if (delaysamplenum)
 						fprintf(stderr, "- sample num: %d\n", delaysamplenum);
-					}
 				}
+
+				/*
+				 * avoid possible negative index when on the 1st second
+				 * (correction will be done on the 2nd second)
+				 */
+				if (i == 0) samplenum = 0;
 
 				// Write the constructed buffer, minus startup delay plus however many seconds
 				// have already elapsed since the minute. This happens only at startup;
