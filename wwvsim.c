@@ -947,9 +947,10 @@ int main(int argc,char *argv[]) {
 	int year,month,day,hour,minute;
 	int dut1 = 0;
 	int manual_time = 0;
-	int samplenum = 0;
-	int delaysamplenum = 0;
-	int sync_delay = 0;
+	int samplenum;
+	int delaysamplenum;
+	int sync_delay;
+	int leadlag;
 	struct timeval synctv;
 #ifdef DIRECT
 	double fsec;
@@ -1171,24 +1172,33 @@ int main(int argc,char *argv[]) {
 				 * get the number of samples that should be skipped so the simulator
 				 * stays in sync
 				 */
-				if (synctv.tv_usec < 500000) /* going too slow */
+				if (synctv.tv_usec < 250000) { /* going too slow */
 					sync_delay = synctv.tv_usec / 1000;
-				else /* going too fast */
-					sync_delay = (synctv.tv_usec - 1000000) / 1000;
+					leadlag = 1;
+				} else if (synctv.tv_usec > 750000) { /* going too fast */
+					sync_delay = (1000000 - synctv.tv_usec) / 1000;
+					leadlag = 2;
+				} else {
+					sync_delay = 0;
+					leadlag = 0;
+				}
 
-				/* delay if we're running early */
-				if (sync_delay < 0) {
+				if (leadlag == 2) { /* delay if we're leading */
 					samplenum = 0;
-					delaysamplenum = (-sync_delay * Samprate_ms / 1000) * 2;
-				} else { /* skip if we're running late */
+					delaysamplenum = (sync_delay * Samprate_ms / 1000) * 2;
+				} else if (leadlag == 1) { /* skip if we're lagging */
 					samplenum = (sync_delay * Samprate_ms / 1000) * 2;
+					delaysamplenum = 0;
+				} else {
+					samplenum = 0;
 					delaysamplenum = 0;
 				}
 
 				if (Verbose) {
-					fprintf(stderr, "sync delay: %d nsec\n", sync_delay);
-					fprintf(stderr, "+ sample num: %d\n", samplenum);
-					fprintf(stderr, "- sample num: %d\n", delaysamplenum);
+					if (sync_delay) {
+						fprintf(stderr, "+ sample num: %d\n", samplenum);
+						fprintf(stderr, "- sample num: %d\n", delaysamplenum);
+					}
 				}
 
 				// Write the constructed buffer, minus startup delay plus however many seconds
