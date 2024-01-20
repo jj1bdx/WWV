@@ -8,13 +8,19 @@ from [kalafut's WWV simulator](https://github.com/kalafut/wwv).
 This started as a quick hack but ended up fully functional. The program generates raw 16-bit linear PCM mono audio at a
 16 kHz sample rate on standard output. So to hear it, pipe it into your local audio player, e.g.,
 ```
+# for Linux
 wwvsim | aplay
+# for macOS with sox
+wwvsim | ./wwvsim | play -t raw -b 16 -e signed-integer -r 16000 -c 1 -
 ```
 
 Or for the WWVH format:
 
 ```
+# for Linux
 wwvsim -H | aplay
+# for macOS with sox
+wwvsim -H | ./wwvsim | play -t raw -b 16 -e signed-integer -r 16000 -c 1 -
 ```
 Without arguments, it generates a WWV program using your local computer's clock. Run wwvsim with a bogus argument,
 e.g., 'wwvsim -?' to get a list of command line arguments.
