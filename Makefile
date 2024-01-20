@@ -1,18 +1,12 @@
-# $Id: Makefile,v 1.5 2017/09/26 17:26:35 karn Exp $ Makefile for standalone WWV/WWVH program
-BINDIR=/usr/local/bin
-LIBDIR=/usr/local/share/ka9q-radio
-CFLAGS=-g -O2
+CC = gcc
+CFLAGS = -O2 -Wall -Wextra -pedantic -std=c11
 
-all:	wwvsim wwv.txt wwvh.txt
+all: wwvsim
+
+wwvsim: wwvsim.o voice.o geophys.o audio/*.c
+	$(MAKE) -C audio
+	$(CC) -o $@ wwvsim.o voice.o geophys.o audio/audio.a -lm -s -pthread
 
 clean:
-	rm -f *.o wwvsim
-	rcsclean
-
-install: wwvsim	
-	install -D --target-directory=$(BINDIR) wwvsim
-	install -D --target-directory=$(LIBDIR) wwv.txt wwvh.txt
-
-wwvsim: wwvsim.o
-	$(CC) -g -o $@ $^ -lncurses -lportaudio -lm
-
+	$(MAKE) -C audio clean
+	rm -f *.o

@@ -1,0 +1,7 @@
+HamSCI test signal attributions
+
+voice intro: from 
+https://github.com/aidanmontare-edu/wwv-h-characterization-signal-ports
+
+test signal: from
+https://www.youtube.com/watch?v=UVIGS1XvQAY
